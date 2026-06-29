@@ -543,20 +543,55 @@ tbody tr:hover td{background:var(--bg1)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
-// ===== localStorage 保存・読み込み =====
-const LS_KEY='nexus_ats_data';
-function saveToStorage(){
+// ===== Google スプレッドシート データ共有 =====
+const GAS_URL='https://script.google.com/macros/s/AKfycbzVI9dhAFCxUkS6hN5BoHt3reb8X-m8Gk6zh2Nfa7pwmDa7zma0gIl-KIxL-3aXeb852w/exec';
+const LS_KEY='nexus_ats_data'; // オフライン用バックアップとして残す
+
+// スプレッドシートに保存
+async function saveToStorage(){
+  // localStorageにも同時保存（オフライン時のバックアップ）
   try{
-    const data={
-      applicants,interviewees,agencies,
-      idC,agIdC,
-      shokuMaster,agentMaster,monthlyBudgets,
-      users,uIdC
-    };
+    const data=buildSaveData();
     localStorage.setItem(LS_KEY,JSON.stringify(data));
-  }catch(e){console.warn('保存失敗:',e);}
+  }catch(e){}
+  // スプレッドシートに非同期保存（失敗してもUIは止めない）
+  try{
+    const data=buildSaveData();
+    await fetch(GAS_URL,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'write',data})
+    });
+  }catch(e){console.warn('クラウド保存失敗（オフライン？）:',e);}
 }
-function loadFromStorage(){
+
+function buildSaveData(){
+  return {applicants,interviewees,agencies,shokuMaster,agentMaster,monthlyBudgets,users,idC,agIdC,uIdC};
+}
+
+// スプレッドシートから読み込み
+async function loadFromStorage(){
+  // まずスプレッドシートから読み込み試行
+  try{
+    const res=await fetch(GAS_URL+'?action=read');
+    const data=await res.json();
+    if(data && !data.error){
+      if(Array.isArray(data.applicants)) applicants=data.applicants;
+      if(Array.isArray(data.interviewees)) interviewees=data.interviewees;
+      if(Array.isArray(data.agencies)) agencies=data.agencies;
+      if(Array.isArray(data.shokuMaster)) shokuMaster=data.shokuMaster;
+      if(Array.isArray(data.agentMaster)) agentMaster=data.agentMaster;
+      if(data.monthlyBudgets && typeof data.monthlyBudgets==='object') monthlyBudgets=data.monthlyBudgets;
+      if(Array.isArray(data.users)) users=data.users;
+      if(data.idC) idC=data.idC;
+      if(data.agIdC) agIdC=data.agIdC;
+      if(data.uIdC) uIdC=data.uIdC;
+      // localStorageにも同期しておく
+      try{localStorage.setItem(LS_KEY,JSON.stringify(buildSaveData()));}catch(e){}
+      return 'cloud';
+    }
+  }catch(e){console.warn('クラウド読み込み失敗、ローカルから復元:',e);}
+  // スプレッドシートが失敗したらlocalStorageから読み込み
   try{
     const raw=localStorage.getItem(LS_KEY);
     if(!raw) return false;
@@ -571,8 +606,8 @@ function loadFromStorage(){
     if(data.monthlyBudgets) monthlyBudgets=data.monthlyBudgets;
     if(data.users) users=data.users;
     if(data.uIdC) uIdC=data.uIdC;
-    return true;
-  }catch(e){console.warn('読み込み失敗:',e);return false;}
+    return 'local';
+  }catch(e){return false;}
 }
 
 // ===== STATE =====
@@ -2504,8 +2539,18 @@ function sw(id,btn){
 }
 
 // ===== 起動処理 =====
-// localStorageからデータを復元してから画面を初期化
-const restored=loadFromStorage();
-if(restored) showToast('前回のデータを復元しました');
-renderApplicants();updateBadges();
+async function initApp(){
+  // ローディング表示
+  document.getElementById('main').innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;color:var(--tx1)">'
+    +'<div style="font-size:14px">☁️ データを読み込んでいます...</div>'
+    +'<div style="font-size:11px;color:var(--tx2)">Googleスプレッドシートに接続中</div>'
+    +'</div>';
+  const result=await loadFromStorage();
+  if(result==='cloud') showToast('☁️ クラウドからデータを復元しました');
+  else if(result==='local') showToast('📱 ローカルからデータを復元しました');
+  renderApplicants();
+  updateBadges();
+}
+initApp();
 </script>
