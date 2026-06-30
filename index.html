@@ -562,25 +562,33 @@ const GAS_URL='https://script.google.com/macros/s/AKfycbzVI9dhAFCxUkS6hN5BoHt3re
 const LS_KEY='nexus_ats_data'; // オフライン用バックアップとして残す
 
 // スプレッドシートに保存
-async function saveToStorage(){
-  // localStorageにも同時保存（オフライン時のバックアップ）
+// keys: 保存したい項目名の配列（省略時は全項目を保存=互換動作）
+async function saveToStorage(keys){
+  // localStorageには常に全データを保存（オフライン用バックアップなので軽量化不要）
   try{
     const data=buildSaveData();
     localStorage.setItem(LS_KEY,JSON.stringify(data));
   }catch(e){}
-  // スプレッドシートに非同期保存（失敗してもUIは止めない）
+  // スプレッドシートには指定されたキーだけを送信（高速化）
   try{
-    const data=buildSaveData();
+    const full=buildSaveData();
+    let payload;
+    if(Array.isArray(keys)&&keys.length>0){
+      payload={};
+      keys.forEach(k=>{ if(k in full) payload[k]=full[k]; });
+    } else {
+      payload=full; // 互換：指定なしなら全部送る
+    }
     await fetch(GAS_URL,{
       method:'POST',
       headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'write',data})
+      body:JSON.stringify({action:'write',data:payload})
     });
   }catch(e){console.warn('クラウド保存失敗（オフライン？）:',e);}
 }
 
 function buildSaveData(){
-  return {applicants,interviewees,agencies,shokuMaster,agentMaster,tantoMaster,monthlyBudgets,users,idC,agIdC,uIdC};
+  return {applicants,interviewees,agencies,shokuMaster,shokuTypeMap,agentMaster,tantoMaster,monthlyBudgets,users,idC,agIdC,uIdC};
 }
 
 // スプレッドシートから読み込み
@@ -594,6 +602,7 @@ async function loadFromStorage(){
       if(Array.isArray(data.interviewees)) interviewees=data.interviewees;
       if(Array.isArray(data.agencies)) agencies=data.agencies;
       if(Array.isArray(data.shokuMaster)) shokuMaster=data.shokuMaster;
+      if(data.shokuTypeMap && typeof data.shokuTypeMap==='object') shokuTypeMap=data.shokuTypeMap;
       if(Array.isArray(data.agentMaster)) agentMaster=data.agentMaster;
       if(Array.isArray(data.tantoMaster)) tantoMaster=data.tantoMaster;
       if(data.monthlyBudgets && typeof data.monthlyBudgets==='object') monthlyBudgets=data.monthlyBudgets;
@@ -617,6 +626,7 @@ async function loadFromStorage(){
     if(data.idC) idC=data.idC;
     if(data.agIdC) agIdC=data.agIdC;
     if(data.shokuMaster) shokuMaster=data.shokuMaster;
+    if(data.shokuTypeMap) shokuTypeMap=data.shokuTypeMap;
     if(data.agentMaster) agentMaster=data.agentMaster;
     if(data.tantoMaster) tantoMaster=data.tantoMaster;
     if(data.monthlyBudgets) monthlyBudgets=data.monthlyBudgets;
@@ -681,6 +691,8 @@ function filterActiveCount(screen){
 }
 let analyticsTab='monthly';
 let shokuMaster=['上棟','足場','ドライバー','内装','住設事務','受発注事務','DX事務'];
+// 職種ごとの区分（'jimu'=バックオフィス／'genba'=現場）。キー：職種名
+let shokuTypeMap={'住設事務':'jimu','受発注事務':'jimu','DX事務':'jimu','一般事務':'jimu'};
 // 現場採用担当者マスター
 let tantoMaster=[];
 // マスター画面のタブ状態（職種／担当者）
@@ -691,8 +703,11 @@ let agentMaster=[
   {name:'Global HR Partners',rate:30,refund:'入社後1ヶ月以内退職で50%返金'},
 ];
 // 事務職系の判定（コスト分析用）
-const JIMU_SHOKU=['住設事務','受発注事務','DX事務'];
-function isJimu(shoku){return JIMU_SHOKU.includes(shoku);}
+const JIMU_SHOKU=['住設事務','受発注事務','DX事務','一般事務'];
+function isJimu(shoku){
+  if(shokuTypeMap && shokuTypeMap[shoku]) return shokuTypeMap[shoku]==='jimu';
+  return JIMU_SHOKU.includes(shoku); // 旧データ互換
+}
 // コスト分析用の月次データストア
 let monthlyBudgets={};  // key: 'YYYY-MM', value: {jimu: 0, genba: 0}
 function getBudgetKey(y,m){return `${y}-${String(m).padStart(2,'0')}`;}
@@ -1872,7 +1887,7 @@ function renderAnalytics(){
       </div>`;
       const jimuFrame=`
       <div class="sc" style="margin:0;border-top:3px solid #2563eb">
-        <div class="sc-t" style="color:#2563eb;display:flex;align-items:center;gap:8px">📋 事務職
+        <div class="sc-t" style="color:#2563eb;display:flex;align-items:center;gap:8px">📋 バックオフィス職
           <span style="font-size:10px;font-weight:400;color:var(--tx1)">広告費:</span>
           <input type="number" value="${jimuBudget}" placeholder="0"
             onchange="setBudget(${selY},${selM},'jimu',this.value);renderAnalytics()"
@@ -1923,7 +1938,7 @@ function renderAnalytics(){
       </div>`;
       const jimuList=`
       <div class="sc" style="margin:0">
-        <div class="sc-t" style="color:#2563eb">📋 事務職 月次サマリー</div>
+        <div class="sc-t" style="color:#2563eb">📋 バックオフィス職 月次サマリー</div>
         <div style="background:var(--bg1);border:0.5px solid var(--bd1);border-radius:7px;padding:8px 10px;margin-bottom:10px">
           <label style="font-size:10px;font-weight:500;color:var(--tx1);display:block;margin-bottom:4px">広告費（手入力）:</label>
           <div style="display:flex;align-items:center;gap:4px"><span style="color:var(--tx1);font-size:13px">¥</span>
@@ -1971,7 +1986,7 @@ function renderAnalytics(){
       </div>
       <div class="sc" style="margin:0">
         <div class="sc-t">単価比較グラフ</div>
-        ${[{l:'事務CPA',v:jimuCPA,c:'#2563eb'},{l:'現場CPA',v:genbaCPA,c:'#0891b2'},{l:'事務CPI',v:jimuCPI,c:'#7c3aed'},{l:'現場CPI',v:genbaCPI,c:'#d97706'},{l:'決定CPH',v:cph,c:'#be123c'}].map(b=>`
+        ${[{l:'BO CPA',v:jimuCPA,c:'#2563eb'},{l:'現場CPA',v:genbaCPA,c:'#0891b2'},{l:'BO CPI',v:jimuCPI,c:'#7c3aed'},{l:'現場CPI',v:genbaCPI,c:'#d97706'},{l:'決定CPH',v:cph,c:'#be123c'}].map(b=>`
         <div class="bar-row"><div class="bar-lr"><span style="color:var(--tx1);font-size:10px">${b.l}</span><span style="font-weight:500;font-size:10px">¥${b.v.toLocaleString()}</span></div>
           <div class="bar-tr"><div class="bar-fi" style="width:${b.v?Math.round(b.v/maxBar*100):0}%;background:${b.c}"></div></div>
         </div>`).join('')}
@@ -2068,7 +2083,7 @@ function renderAnalytics(){
       <!-- KPI・合格率カード形式（画像2 年間版） -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         ${mkYFrame('🏗 現場職 年間','#0891b2','#ecfeff',yGenba.length,yGI1Cnt,yGFinalCnt,yGOffer,yGHired,yGDocPass,yGDocFail,yGDocRate,yGI1Pass,yGI1Fail,yGI1Rate,yGFinalOfferRate,yGOfferRate,yGTotalRate,yGenbaBgt,yGCPA,yGNotAdopted)}
-        ${mkYFrame('📋 事務職 年間','#2563eb','#eff6ff',yJimu.length,yJI1Cnt,yJFinalCnt,yJOffer,yJHired,yJDocPass,yJDocFail,yJDocRate,yJI1Pass,yJI1Fail,yJI1Rate,yJFinalOfferRate,yJOfferRate,yJTotalRate,yJimuBgt,yJCPA,yJNotAdopted)}
+        ${mkYFrame('📋 バックオフィス職 年間','#2563eb','#eff6ff',yJimu.length,yJI1Cnt,yJFinalCnt,yJOffer,yJHired,yJDocPass,yJDocFail,yJDocRate,yJI1Pass,yJI1Fail,yJI1Rate,yJFinalOfferRate,yJOfferRate,yJTotalRate,yJimuBgt,yJCPA,yJNotAdopted)}
       </div>
       <!-- リスト形式サマリー（画像1 年間版） -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
@@ -2085,7 +2100,7 @@ function renderAnalytics(){
           </div>
         </div>
         <div class="sc" style="margin:0">
-          <div class="sc-t" style="color:#2563eb">📋 事務職 年間サマリー</div>
+          <div class="sc-t" style="color:#2563eb">📋 バックオフィス職 年間サマリー</div>
           <div style="font-size:11px">
             <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--bd2)"><span style="color:var(--tx1)">応募数</span><span style="font-weight:500">${yJimu.length}名</span></div>
             <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--bd2)"><span style="color:var(--tx1)">書類合格</span><span style="font-weight:500">${yJDocPass}名</span></div>
@@ -2113,7 +2128,7 @@ function renderAnalytics(){
         </div>
         <div style="display:flex;gap:12px;font-size:10px;color:var(--tx1)">
           <span><span style="display:inline-block;width:10px;height:10px;background:#0891b2;border-radius:2px;margin-right:4px"></span>現場</span>
-          <span><span style="display:inline-block;width:10px;height:10px;background:#2563eb;border-radius:2px;margin-right:4px"></span>事務</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:#2563eb;border-radius:2px;margin-right:4px"></span>バックオフィス</span>
         </div>
       </div>
       <!-- 月別カード -->
@@ -2121,11 +2136,11 @@ function renderAnalytics(){
         ${annualData.map((d,i)=>`<div class="dc">
           <div class="dc-l" style="font-weight:500">${i+1}月</div>
           <div style="font-size:12px;font-weight:500">${d.apps}名</div>
-          <div style="font-size:9px;color:var(--tx1)">現場${d.genba}/事務${d.jimu}</div>
+          <div style="font-size:9px;color:var(--tx1)">現場${d.genba}/BO${d.jimu}</div>
           <div style="font-size:9px;color:#be123c">内定${d.offer}</div>
           <div style="font-size:9px;color:#16a34a">決定${d.decided}</div>
           <div style="font-size:8px;color:var(--tx1)">現場¥${d.genbaCPA?d.genbaCPA.toLocaleString():'−'}</div>
-          <div style="font-size:8px;color:var(--tx1)">事務¥${d.jimuCPA?d.jimuCPA.toLocaleString():'−'}</div>
+          <div style="font-size:8px;color:var(--tx1)">BO¥${d.jimuCPA?d.jimuCPA.toLocaleString():'−'}</div>
         </div>`).join('')}
       </div>`;
     })()}
@@ -2150,7 +2165,7 @@ function renderAnalytics(){
         </div>`;
       }).join('')}
       <div style="font-size:10px;color:var(--tx1);margin-top:8px;padding-top:8px;border-top:0.5px solid var(--bd2)">
-        <span style="margin-right:12px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2563eb;margin-right:3px"></span>事務系</span>
+        <span style="margin-right:12px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2563eb;margin-right:3px"></span>バックオフィス系</span>
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0891b2;margin-right:3px"></span>現場系</span>
       </div>
     </div>
@@ -2297,11 +2312,16 @@ function renderMaster(){
           </div>
           <span style="font-size:10px;color:var(--tx2);width:18px">${i+1}</span>
           <span class="shoku-tag ${isJimu(s)?'jimu':'genba'}">${s}</span><span style="flex:1;font-size:12px">${s}</span>
+          <button class="btn-outline" style="font-size:10px;padding:3px 9px;border-radius:5px;cursor:pointer" onclick="toggleShokuType(${i})">${isJimu(s)?'バックオフィス':'現場'} ⇄ 切替</button>
           <button class="btn-sm-red" onclick="deleteShoku(${i})"><i class="ti ti-trash" aria-hidden="true"></i> 削除</button>
         </div>`).join('')}
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
         <input id="shoku-new" type="text" placeholder="新しい職種名を入力" style="flex:1;border:0.5px solid var(--bd1);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;background:#fff" onkeydown="if(event.key==='Enter')addShoku()">
+        <select id="shoku-new-type" style="border:0.5px solid var(--bd1);border-radius:6px;padding:6px 8px;font-size:12px;outline:none;background:#fff">
+          <option value="genba">現場</option>
+          <option value="jimu">バックオフィス</option>
+        </select>
         <button class="btn btn-blue" onclick="addShoku()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
       </div>
     </div>
@@ -2330,11 +2350,21 @@ function renderMaster(){
 }
 function addShoku(){
   const val=document.getElementById('shoku-new').value.trim();
+  const type=document.getElementById('shoku-new-type').value;
   if(!val){showToast('職種名を入力してください');return;}
   if(shokuMaster.includes(val)){showToast('すでに存在します');return;}
-  shokuMaster.push(val);renderMaster();saveToStorage();showToast(`「${val}」を追加しました`);
+  shokuMaster.push(val);
+  shokuTypeMap[val]=type;
+  renderMaster();saveToStorage();showToast(`「${val}」を追加しました`);
 }
-function deleteShoku(i){const name=shokuMaster[i];shokuMaster.splice(i,1);renderMaster();saveToStorage();showToast(`「${name}」を削除しました`);}
+function toggleShokuType(i){
+  const name=shokuMaster[i];
+  const current=isJimu(name);
+  shokuTypeMap[name]=current?'genba':'jimu';
+  renderMaster();saveToStorage();
+  showToast(`「${name}」を${current?'現場':'バックオフィス'}に変更しました`);
+}
+function deleteShoku(i){const name=shokuMaster[i];shokuMaster.splice(i,1);delete shokuTypeMap[name];renderMaster();saveToStorage();showToast(`「${name}」を削除しました`);}
 // 職種マスターの並び替え（dir: -1=上へ, 1=下へ）
 function moveShoku(i,dir){
   const j=i+dir;
@@ -2785,7 +2815,7 @@ function renderFunnel(){
     var jimu=isJimu(s);
     var tagCls=jimu?'jimu':'genba';
     var tagColor=jimu?'#1d4ed8':'#0e7490';
-    var tagLabel=jimu?'事務':'現場';
+    var tagLabel=jimu?'バックオフィス':'現場';
     var passR=pct1(sp,sa.length);
     var hiredR=pct1(sh,sa.length);
     var passColor=pct(sp,sa.length)>=50?'#16a34a':'#d97706';
