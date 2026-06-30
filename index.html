@@ -595,7 +595,7 @@ async function loadFromStorage(){
       if(Array.isArray(data.agencies)) agencies=data.agencies;
       if(Array.isArray(data.shokuMaster)) shokuMaster=data.shokuMaster;
       if(Array.isArray(data.agentMaster)) agentMaster=data.agentMaster;
-      if(Array.isArray(data.tantoMaster)&&data.tantoMaster.length>0) tantoMaster=data.tantoMaster;
+      if(Array.isArray(data.tantoMaster)) tantoMaster=data.tantoMaster;
       if(data.monthlyBudgets && typeof data.monthlyBudgets==='object') monthlyBudgets=data.monthlyBudgets;
       if(Array.isArray(data.users)&&data.users.length>0) users=data.users;
       if(data.idC) idC=data.idC;
@@ -682,7 +682,7 @@ function filterActiveCount(screen){
 let analyticsTab='monthly';
 let shokuMaster=['上棟','足場','ドライバー','内装','住設事務','受発注事務','DX事務'];
 // 現場採用担当者マスター
-let tantoMaster=['田尾','鵜林','栗原','宮川','楡井','堀'];
+let tantoMaster=[];
 // マスター画面のタブ状態（職種／担当者）
 let masterTab='shoku';
 // エージェント会社マスター（社名・料率・返金規定）
@@ -2848,7 +2848,8 @@ async function initApp(){
     +'</div>';
   const result=await loadFromStorage();
   if(result==='cloud') showToast('☁️ クラウドからデータを復元しました');
-  else if(result==='local') showToast('📱 ローカルからデータを復元しました');
+  else if(result==='local') showToast('📱 ローカル保存データを復元しました（クラウド接続失敗）');
+  else showToast('⚠️ データの読み込みに失敗しました（初期状態で起動）');
   renderApplicants();
   updateBadges();
 }
