@@ -113,6 +113,14 @@ tbody tr:hover td{background:var(--bg1)}
 .shoku-tag{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500;background:#e0f2fe;color:#0369a1;border:0.5px solid #7dd3fc;white-space:nowrap}
 .shoku-tag.jimu{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
 .shoku-tag.genba{background:#ecfeff;color:#0e7490;border-color:#67e8f9}
+/* フィルタパネル */
+.filter-panel{background:var(--bg0);border:0.5px solid var(--bd2);border-radius:var(--r-lg);padding:10px 12px;margin-bottom:10px}
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.filter-item{display:flex;flex-direction:column;gap:2px;min-width:90px}
+.filter-item label{font-size:9px;color:var(--tx1);font-weight:500}
+.filter-item input,.filter-item select{border:0.5px solid var(--bd1);border-radius:5px;padding:4px 6px;font-size:11px;outline:none;background:#fff;color:var(--tx0)}
+.filter-item input:focus,.filter-item select:focus{border-color:#2563eb}
+.filter-badge{background:#2563eb;color:#fff;font-size:9px;padding:1px 6px;border-radius:999px;margin-left:4px}
 /* 面接日アラート */
 .int-date-input{border:0.5px solid var(--bd1);border-radius:5px;padding:2px 5px;font-size:10px;color:var(--tx0);background:#fff;outline:none;width:110px}
 .int-date-input:focus{border-color:#2563eb}
@@ -207,7 +215,7 @@ tbody tr:hover td{background:var(--bg1)}
       <button class="nb" onclick="sw('analytics',this)"><i class="ti ti-chart-bar" aria-hidden="true"></i>コスト分析</button>
       <button class="nb" onclick="sw('funnel',this)"><i class="ti ti-arrows-split" aria-hidden="true"></i>遷移率分析</button>
       <button class="nb" onclick="sw('dashboard',this)"><i class="ti ti-layout-dashboard" aria-hidden="true"></i>応募属性</button>
-      <button class="nb" onclick="sw('master',this)"><i class="ti ti-settings" aria-hidden="true"></i>職種マスター</button>
+      <button class="nb" onclick="sw('master',this)"><i class="ti ti-settings" aria-hidden="true"></i>マスター</button>
     </nav>
     <div style="padding:8px 6px;border-top:0.5px solid #1e293b;margin-top:auto">
       <div id="sb-user-info" style="font-size:10px;color:#94a3b8;padding:6px 8px;margin-bottom:4px"></div>
@@ -254,6 +262,9 @@ tbody tr:hover td{background:var(--bg1)}
           </div>
           <div class="det-row"><span class="det-key">応募日</span><span id="dm-date"></span></div>
           <div class="det-row"><span class="det-key">経路</span><span id="dm-route"></span></div>
+          <div class="det-row"><span class="det-key">現場担当者</span>
+            <select class="ef" id="dm-tanto-edit" onchange="saveField('tanto',this.value)" style="font-size:11px;padding:2px 4px"></select>
+          </div>
         </div>
       </div>
       <!-- 添付ファイル -->
@@ -323,6 +334,7 @@ tbody tr:hover td{background:var(--bg1)}
           <div><span style="color:var(--tx1)">職種：</span><span id="im-job"></span></div>
           <div><span style="color:var(--tx1)">エリア：</span><span id="im-area"></span></div>
           <div><span style="color:var(--tx1)">職種区分：</span><span id="im-shoku"></span></div>
+          <div><span style="color:var(--tx1)">現場担当者：</span><span id="im-tanto"></span></div>
         </div>
       </div>
       <!-- 必須入力：生年月日・職種区分 -->
@@ -402,6 +414,8 @@ tbody tr:hover td{background:var(--bg1)}
         <div class="fr" style="margin:0"><label>入社予定日</label><input id="ag-joindate" type="date"></div>
         <div class="fr" style="margin:0"><label>電話番号</label><input id="ag-phone" placeholder="090-0000-0000"></div>
       </div>
+      <div style="margin-bottom:8px"></div>
+      <div class="fr"><label>現場担当者</label><select id="ag-tanto" style="width:100%;border:0.5px solid var(--bd1);border-radius:6px;padding:5px 8px;font-size:12px;color:var(--tx0);background:#fff;outline:none"></select></div>
       <div style="margin-bottom:8px"></div>
       <div class="fr"><label>求人情報（ポジション詳細・条件など）</label><textarea id="ag-jobinfo" rows="2" style="width:100%;border:0.5px solid var(--bd1);border-radius:6px;padding:5px 8px;font-size:12px;color:var(--tx0);background:#fff;outline:none;font-family:var(--font)" placeholder="例：年収500〜600万・フレックス・リモートOK など"></textarea></div>
       <div class="fr"><label>ステータス</label><select id="ag-status"></select></div>
@@ -566,7 +580,7 @@ async function saveToStorage(){
 }
 
 function buildSaveData(){
-  return {applicants,interviewees,agencies,shokuMaster,agentMaster,monthlyBudgets,users,idC,agIdC,uIdC};
+  return {applicants,interviewees,agencies,shokuMaster,agentMaster,tantoMaster,monthlyBudgets,users,idC,agIdC,uIdC};
 }
 
 // スプレッドシートから読み込み
@@ -581,8 +595,9 @@ async function loadFromStorage(){
       if(Array.isArray(data.agencies)) agencies=data.agencies;
       if(Array.isArray(data.shokuMaster)) shokuMaster=data.shokuMaster;
       if(Array.isArray(data.agentMaster)) agentMaster=data.agentMaster;
+      if(Array.isArray(data.tantoMaster)&&data.tantoMaster.length>0) tantoMaster=data.tantoMaster;
       if(data.monthlyBudgets && typeof data.monthlyBudgets==='object') monthlyBudgets=data.monthlyBudgets;
-      if(Array.isArray(data.users)) users=data.users;
+      if(Array.isArray(data.users)&&data.users.length>0) users=data.users;
       if(data.idC) idC=data.idC;
       if(data.agIdC) agIdC=data.agIdC;
       if(data.uIdC) uIdC=data.uIdC;
@@ -603,6 +618,7 @@ async function loadFromStorage(){
     if(data.agIdC) agIdC=data.agIdC;
     if(data.shokuMaster) shokuMaster=data.shokuMaster;
     if(data.agentMaster) agentMaster=data.agentMaster;
+    if(data.tantoMaster) tantoMaster=data.tantoMaster;
     if(data.monthlyBudgets) monthlyBudgets=data.monthlyBudgets;
     if(data.users) users=data.users;
     if(data.uIdC) uIdC=data.uIdC;
@@ -612,13 +628,63 @@ async function loadFromStorage(){
 
 // ===== STATE =====
 let applicants=[], interviewees=[], csvPending=[];
-let agencies=[
-  {id:1,agent:'Nexus Recruitment',candidate:'高橋 健太',job:'ドライバー',area:'福島県 伊達市',shoku:'ドライバー',phone:'090-0001-0001',birthDate:'1990-04-01',joinDate:'2026-04-01',status:'内定',rate:'35%',rateNum:35,sal:600,feeNum:2100000,fee:'¥2,100,000',memo:'',jobInfo:''},
-  {id:2,agent:'Global HR Partners',candidate:'伊藤 美咲',job:'営業事務',area:'東京都 西東京市',shoku:'受発注事務',phone:'090-0002-0002',birthDate:'1995-07-15',joinDate:'',status:'一次面接合格',rate:'30%',rateNum:30,sal:500,feeNum:0,fee:'−',memo:'',jobInfo:''},
-];
+let agencies=[];
 let idC=1000, agIdC=20, currentDetailId=null, currentDetailType=null, editingAgId=null;
+// フィルタ状態（各画面ごとに保持）
+let filterState={
+  app:{name:'',ageMin:'',ageMax:'',job:'',area:'',shoku:'',dateFrom:'',dateTo:'',docStatus:'',tanto:''},
+  int:{name:'',ageMin:'',ageMax:'',job:'',area:'',shoku:'',tanto:''},
+  ag:{name:'',ageMin:'',ageMax:'',job:'',area:'',shoku:'',tanto:''}
+};
+
+// 汎用フィルタ関数：1件のデータが条件に合致するか判定
+function filterMatch(c,f,screen){
+  const name=c.name||c.candidate||'';
+  if(f.name&&!name.includes(f.name)) return false;
+  if(f.ageMin||f.ageMax){
+    const a=calcAge(c.birthDate);
+    if(a===null) return false;
+    if(f.ageMin&&a<parseInt(f.ageMin)) return false;
+    if(f.ageMax&&a>parseInt(f.ageMax)) return false;
+  }
+  if(f.job&&!(c.job||'').includes(f.job)) return false;
+  if(f.area&&!(c.area||'').includes(f.area)) return false;
+  if(f.shoku&&c.shoku!==f.shoku) return false;
+  if(f.tanto&&c.tanto!==f.tanto) return false;
+  if(screen==='app'){
+    if(f.dateFrom&&(c.appliedAt||'')<f.dateFrom) return false;
+    if(f.dateTo&&(c.appliedAt||'')>f.dateTo) return false;
+    if(f.docStatus){
+      const isPass=!!(c.phases&&c.phases['書類合格']);
+      const isFail=!!(c.phases&&c.phases['書類不合格']);
+      if(f.docStatus==='pass'&&!isPass) return false;
+      if(f.docStatus==='fail'&&!isFail) return false;
+      if(f.docStatus==='pending'&&(isPass||isFail)) return false;
+    }
+  }
+  return true;
+}
+function filterList(list,screen){
+  const f=filterState[screen];
+  return list.filter(c=>filterMatch(c,f,screen));
+}
+function updateFilter(screen,key,val,renderFn){
+  filterState[screen][key]=val;
+  renderFn();
+}
+function resetFilter(screen,renderFn){
+  Object.keys(filterState[screen]).forEach(k=>filterState[screen][k]='');
+  renderFn();
+}
+function filterActiveCount(screen){
+  return Object.values(filterState[screen]).filter(v=>v!=='').length;
+}
 let analyticsTab='monthly';
 let shokuMaster=['上棟','足場','ドライバー','内装','住設事務','受発注事務','DX事務'];
+// 現場採用担当者マスター
+let tantoMaster=['田尾','鵜林','栗原','宮川','楡井','堀'];
+// マスター画面のタブ状態（職種／担当者）
+let masterTab='shoku';
 // エージェント会社マスター（社名・料率・返金規定）
 let agentMaster=[
   {name:'Nexus Recruitment',rate:35,refund:'入社後3ヶ月以内退職で全額返金'},
@@ -838,10 +904,10 @@ function confirmCSV(){
 }
 function exportApplicants(){
   if(!applicants.length){showToast('データがありません');return;}
-  const h=['氏名','電話番号','メールアドレス','生年月日','年齢','応募日','職種名','応募エリア','職種区分','居住地','経験','学歴','応募経路','採用見込','現ステータス','メモ'];
+  const h=['氏名','電話番号','メールアドレス','生年月日','年齢','応募日','職種名','応募エリア','職種区分','居住地','経験','学歴','応募経路','採用見込','現ステータス','現場担当者','メモ'];
   const rows=applicants.map(c=>{
     const k=Object.keys(c.phases);
-    return [c.name,c.phone,c.email,c.birthDate||'',ageLabel(c.birthDate),c.appliedAt,c.job,c.area||'',c.shoku||'',c.address,c.experience,c.education,c.route,c.prospect,k.length?k[k.length-1]:'',`"${(c.memo||'').replace(/"/g,'""')}"`];
+    return [c.name,c.phone,c.email,c.birthDate||'',ageLabel(c.birthDate),c.appliedAt,c.job,c.area||'',c.shoku||'',c.address,c.experience,c.education,c.route,c.prospect,k.length?k[k.length-1]:'',c.tanto||'',`"${(c.memo||'').replace(/"/g,'""')}"`];
   });
   const csv=[h,...rows].map(r=>r.join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
@@ -948,6 +1014,7 @@ function openDM(id){
   document.getElementById('dm-shoku-edit').innerHTML=shokuOpts(c.shoku||'（未設定）');
   document.getElementById('dm-date').textContent=c.appliedAt||'−';
   document.getElementById('dm-route').textContent=c.route||'−';
+  document.getElementById('dm-tanto-edit').innerHTML=tantoOpts(c.tanto||'（未設定）');
   document.getElementById('dm-memo').value=c.memo||'';
   // 添付ファイル表示
   document.getElementById('dm-resume-label').textContent=c.resumeName||'未添付';
@@ -991,13 +1058,15 @@ function attachFile(type,input){
 function saveField(field,val){
   const list=currentDetailType==='app'?applicants:interviewees;
   const c=list.find(x=>x.id===currentDetailId);if(!c)return;
-  c[field]=val;
+  // 「（未設定）」が選択された場合は空文字として保存
+  const saveVal=(val==='（未設定）')?'':val;
+  c[field]=saveVal;
   const el=document.getElementById(`${field}-${c.id}`);
   if(el){
     if(field==='shoku'){
-      el.innerHTML=val&&val!=='（未設定）'?`<span class="shoku-tag ${isJimu(val)?'jimu':'genba'}">${val}</span>`:'−';
+      el.innerHTML=saveVal&&saveVal!=='（未設定）'?`<span class="shoku-tag ${isJimu(saveVal)?'jimu':'genba'}">${saveVal}</span>`:'−';
     } else {
-      el.textContent=val||'−';
+      el.textContent=saveVal||'−';
     }
   }
   showToast('更新しました');saveToStorage();
@@ -1053,6 +1122,7 @@ function openIM(id){
   document.getElementById('im-job').textContent=c.job||'−';
   document.getElementById('im-area').textContent=c.area||'−';
   document.getElementById('im-shoku').textContent=c.shoku&&c.shoku!=='（未設定）'?c.shoku:'−';
+  document.getElementById('im-tanto').textContent=c.tanto||'−';
   document.getElementById('im-memo').value=c.memo||'';
   // 必須項目（生年月日・職種区分）
   document.getElementById('im-birth-req').value=c.birthDate||'';
@@ -1200,6 +1270,7 @@ function openAG(editId){
   document.getElementById('ag-shoku').innerHTML=shokuOpts();
   document.getElementById('ag-status').innerHTML=statusOpts();
   document.getElementById('ag-agent-sel').innerHTML=agentOpts();
+  document.getElementById('ag-tanto').innerHTML=tantoOpts();
   if(editId){
     const a=agencies.find(x=>x.id===editId);if(!a)return;
     document.getElementById('ag-agent-sel').value=agentMaster.find(m=>m.name===a.agent)?a.agent:'（選択してください）';
@@ -1212,6 +1283,7 @@ function openAG(editId){
     document.getElementById('ag-joindate').value=a.joinDate||'';
     document.getElementById('ag-phone').value=a.phone||'';
     document.getElementById('ag-jobinfo').value=a.jobInfo||'';
+    document.getElementById('ag-tanto').value=a.tanto||'（未設定）';
     document.getElementById('ag-status').value=a.status;
     document.getElementById('ag-rate').value=a.rateNum||35;
     document.getElementById('ag-sal').value=a.sal||'';
@@ -1220,6 +1292,7 @@ function openAG(editId){
     document.getElementById('ag-cv-label').textContent=a.cvName||'未添付';
   } else {
     ['ag-cand','ag-job','ag-area','ag-birth','ag-joindate','ag-phone','ag-memo','ag-sal','ag-jobinfo'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('ag-tanto').value='（未設定）';
     document.getElementById('ag-agent').value='';
     document.getElementById('ag-agent-sel').value='（選択してください）';
     document.getElementById('ag-status').value='未着手';document.getElementById('ag-rate').value='35';
@@ -1246,7 +1319,8 @@ function saveAG(){
   const inOffer=status==='入社'; // 入社のみ手数料確定
   const feeNum=sal>0&&inOffer?Math.round(sal*10000*rate/100):0;
   const existAg=editingAgId?agencies.find(x=>x.id===editingAgId):null;
-  const data={agent,candidate:cand,job:document.getElementById('ag-job').value||'−',area:document.getElementById('ag-area').value||'',shoku:document.getElementById('ag-shoku').value||'',birthDate:document.getElementById('ag-birth').value||'',joinDate:document.getElementById('ag-joindate').value||'',phone:document.getElementById('ag-phone').value||'',jobInfo:document.getElementById('ag-jobinfo').value||'',status,rateNum:rate,rate:rate+'%',sal,feeNum,fee:feeNum>0?'¥'+feeNum.toLocaleString():'−',memo:document.getElementById('ag-memo').value||'',
+  const tantoVal=document.getElementById('ag-tanto').value;
+  const data={agent,candidate:cand,job:document.getElementById('ag-job').value||'−',area:document.getElementById('ag-area').value||'',shoku:document.getElementById('ag-shoku').value||'',birthDate:document.getElementById('ag-birth').value||'',joinDate:document.getElementById('ag-joindate').value||'',phone:document.getElementById('ag-phone').value||'',jobInfo:document.getElementById('ag-jobinfo').value||'',tanto:(tantoVal==='（未設定）'?'':tantoVal),status,rateNum:rate,rate:rate+'%',sal,feeNum,fee:feeNum>0?'¥'+feeNum.toLocaleString():'−',memo:document.getElementById('ag-memo').value||'',
     resumeName:existAg?.resumeName||'',resumeData:existAg?.resumeData||'',
     cvName:existAg?.cvName||'',cvData:existAg?.cvData||''};
   if(editingAgId){
@@ -1345,7 +1419,10 @@ function setDocResult(id, result){
   saveToStorage();
 }
 function renderApplicants(){
-  const rows=applicants.map(c=>{
+  const f=filterState.app;
+  const filteredList=filterList(applicants,'app');
+  const activeCnt=filterActiveCount('app');
+  const rows=filteredList.map(c=>{
     const isPass=!!c.phases['書類合格'];
     const isFail=!!c.phases['書類不合格'];
     const rowStyle=isFail?'background:#f1f5f9;opacity:0.6;':'';
@@ -1364,6 +1441,7 @@ function renderApplicants(){
       <td id="shoku-${c.id}">${c.shoku&&c.shoku!=='（未設定）'?`<span class="shoku-tag ${isJimu(c.shoku)?'jimu':'genba'}" style="${isFail?'opacity:0.4':''}">${c.shoku}</span>`:'−'}</td>
       <td style="${isFail?'color:#94a3b8':''}">${c.appliedAt}</td>
       <td>${docSel}</td>
+      <td style="${isFail?'color:#94a3b8':''}">${c.tanto||'−'}</td>
       <td style="text-align:right"><button class="btn btn-outline" style="padding:3px 8px;font-size:10px" onclick="openDM(${c.id})">詳細</button></td>
     </tr>`;
   }).join('');
@@ -1380,9 +1458,72 @@ function renderApplicants(){
       <div class="dc"><div class="dc-l">総応募数</div><div class="dc-v" style="color:#2563eb">${applicants.length}</div></div>
       <div class="dc"><div class="dc-l">未選考数</div><div class="dc-v" style="color:#94a3b8">${applicants.filter(c=>!c.phases['書類合格']&&!c.phases['書類不合格']).length}</div></div>
     </div>
+    <div class="filter-panel">
+      <div class="filter-row">
+        <div class="filter-item" style="min-width:110px">
+          <label>氏名</label>
+          <input type="text" value="${f.name}" placeholder="氏名で検索" oninput="updateFilter('app','name',this.value,renderApplicants)">
+        </div>
+        <div class="filter-item" style="min-width:130px">
+          <label>年齢</label>
+          <div style="display:flex;gap:3px;align-items:center">
+            <input type="number" value="${f.ageMin}" placeholder="下限" style="width:55px" oninput="updateFilter('app','ageMin',this.value,renderApplicants)">
+            <span style="font-size:10px;color:var(--tx1)">〜</span>
+            <input type="number" value="${f.ageMax}" placeholder="上限" style="width:55px" oninput="updateFilter('app','ageMax',this.value,renderApplicants)">
+          </div>
+        </div>
+        <div class="filter-item">
+          <label>応募求人</label>
+          <input type="text" value="${f.job}" placeholder="求人名で検索" oninput="updateFilter('app','job',this.value,renderApplicants)">
+        </div>
+        <div class="filter-item">
+          <label>応募エリア</label>
+          <input type="text" value="${f.area}" placeholder="エリアで検索" oninput="updateFilter('app','area',this.value,renderApplicants)">
+        </div>
+        <div class="filter-item">
+          <label>職種区分</label>
+          <select onchange="updateFilter('app','shoku',this.value,renderApplicants)">
+            <option value="">すべて</option>
+            ${shokuMaster.map(s=>`<option value="${s}" ${f.shoku===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-item" style="min-width:170px">
+          <label>応募日</label>
+          <div style="display:flex;gap:3px;align-items:center">
+            <input type="date" value="${f.dateFrom}" style="width:80px" oninput="updateFilter('app','dateFrom',this.value,renderApplicants)">
+            <span style="font-size:10px;color:var(--tx1)">〜</span>
+            <input type="date" value="${f.dateTo}" style="width:80px" oninput="updateFilter('app','dateTo',this.value,renderApplicants)">
+          </div>
+        </div>
+        <div class="filter-item">
+          <label>書類選考</label>
+          <select onchange="updateFilter('app','docStatus',this.value,renderApplicants)">
+            <option value="">すべて</option>
+            <option value="pending" ${f.docStatus==='pending'?'selected':''}>未選考</option>
+            <option value="pass" ${f.docStatus==='pass'?'selected':''}>合格</option>
+            <option value="fail" ${f.docStatus==='fail'?'selected':''}>不合格</option>
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>現場担当者</label>
+          <select onchange="updateFilter('app','tanto',this.value,renderApplicants)">
+            <option value="">すべて</option>
+            ${tantoMaster.map(t=>`<option value="${t}" ${f.tanto===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>&nbsp;</label>
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="resetFilter('app',renderApplicants)">フィルタ解除${activeCnt>0?`<span class="filter-badge">${activeCnt}</span>`:''}</button>
+        </div>
+      </div>
+    </div>
     <div class="tw"><table>
-      <thead><tr><th>氏名</th><th>年齢</th><th>電話番号</th><th>応募求人</th><th>応募エリア</th><th>職種区分</th><th>応募日</th><th>書類選考</th><th style="text-align:right">詳細</th></tr></thead>
-      <tbody>${rows||`<tr><td colspan="9" style="text-align:center;color:var(--tx1);padding:24px">CSVインポートで応募者を追加してください</td></tr>`}</tbody>
+      <thead><tr>
+        <th>氏名</th><th>年齢</th><th>電話番号</th><th>応募求人</th><th>応募エリア</th>
+        <th>職種区分</th><th>応募日</th><th>書類選考</th><th>現場担当者</th>
+        <th style="text-align:right">詳細</th>
+      </tr></thead>
+      <tbody>${rows||`<tr><td colspan="10" style="text-align:center;color:var(--tx1);padding:24px">${activeCnt>0?'条件に一致する応募者がいません':'CSVインポートで応募者を追加してください'}</td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
@@ -1423,7 +1564,10 @@ function rowStatus(c){
 function renderInterview(){
   const getLP=c=>{const k=Object.keys(c.phases);return k.length?k[k.length-1]:null;};
   const today=new Date();today.setHours(0,0,0,0);
-  const rows=interviewees.map(c=>{
+  const f=filterState.int;
+  const filteredList=filterList(interviewees,'int');
+  const activeCnt=filterActiveCount('int');
+  const rows=filteredList.map(c=>{
     const rs=rowStatus(c);
 
     // 行スタイルの決定
@@ -1477,6 +1621,7 @@ function renderInterview(){
       <td id="intdate-${c.id}">${intDateCell}</td>
       <td>${getLP(c)?bdg(getLP(c)):'-'}</td>
       <td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;${textColor||'color:var(--tx1);'}">${c.memo||'−'}</td>
+      <td style="${textColor}">${c.tanto||'−'}</td>
       <td style="text-align:right"><button class="btn btn-outline" style="padding:3px 8px;font-size:10px" onclick="openIM(${c.id})">選考記録</button></td>
     </tr>`;
   }).join('');
@@ -1507,12 +1652,55 @@ function renderInterview(){
     </div>
     ${interviewees.length===0
       ?`<div class="tw"><div style="text-align:center;padding:30px;color:var(--tx1);font-size:12px">応募者管理の「詳細・記録」→「面接管理に移す」で候補者を追加してください</div></div>`
-      :`<div class="tw"><table>
+      :`<div class="filter-panel">
+      <div class="filter-row">
+        <div class="filter-item" style="min-width:110px">
+          <label>氏名</label>
+          <input type="text" value="${f.name}" placeholder="氏名で検索" oninput="updateFilter('int','name',this.value,renderInterview)">
+        </div>
+        <div class="filter-item" style="min-width:130px">
+          <label>年齢</label>
+          <div style="display:flex;gap:3px;align-items:center">
+            <input type="number" value="${f.ageMin}" placeholder="下限" style="width:55px" oninput="updateFilter('int','ageMin',this.value,renderInterview)">
+            <span style="font-size:10px;color:var(--tx1)">〜</span>
+            <input type="number" value="${f.ageMax}" placeholder="上限" style="width:55px" oninput="updateFilter('int','ageMax',this.value,renderInterview)">
+          </div>
+        </div>
+        <div class="filter-item">
+          <label>応募求人</label>
+          <input type="text" value="${f.job}" placeholder="求人名で検索" oninput="updateFilter('int','job',this.value,renderInterview)">
+        </div>
+        <div class="filter-item">
+          <label>応募エリア</label>
+          <input type="text" value="${f.area}" placeholder="エリアで検索" oninput="updateFilter('int','area',this.value,renderInterview)">
+        </div>
+        <div class="filter-item">
+          <label>職種区分</label>
+          <select onchange="updateFilter('int','shoku',this.value,renderInterview)">
+            <option value="">すべて</option>
+            ${shokuMaster.map(s=>`<option value="${s}" ${f.shoku===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>現場担当者</label>
+          <select onchange="updateFilter('int','tanto',this.value,renderInterview)">
+            <option value="">すべて</option>
+            ${tantoMaster.map(t=>`<option value="${t}" ${f.tanto===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>&nbsp;</label>
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="resetFilter('int',renderInterview)">フィルタ解除${activeCnt>0?`<span class="filter-badge">${activeCnt}</span>`:''}</button>
+        </div>
+      </div>
+    </div>
+    <div class="tw"><table>
         <thead><tr>
-          <th>氏名</th><th>年齢</th><th>電話番号</th><th>応募求人</th><th>応募エリア</th><th>職種区分</th>
-          <th>次回面接日</th><th>選考状況</th><th>メモ</th><th style="text-align:right">操作</th>
+          <th>氏名</th><th>年齢</th><th>電話番号</th><th>応募求人</th><th>応募エリア</th>
+          <th>職種区分</th><th>次回面接日</th><th>選考状況</th><th>メモ</th><th>現場担当者</th>
+          <th style="text-align:right">操作</th>
         </tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${rows||`<tr><td colspan="11" style="text-align:center;color:var(--tx1);padding:24px">条件に一致する候補者がいません</td></tr>`}</tbody>
       </table></div>`}
   </div>`;
 }
@@ -1995,7 +2183,10 @@ function exportAgencies(){
 function renderAgency(){
   // 累計手数料：入社ステータスのみ
   const totalFee=agencies.filter(a=>a.status==='入社').reduce((s,a)=>s+a.feeNum,0);
-  const rows=agencies.map(a=>`<tr>
+  const f=filterState.ag;
+  const filteredList=filterList(agencies,'ag');
+  const activeCnt=filterActiveCount('ag');
+  const rows=filteredList.map(a=>`<tr>
     <td style="font-weight:500">${a.agent}</td><td>${a.candidate}</td>
     <td>${a.birthDate?ageLabel(a.birthDate):'−'}</td>
     <td>${a.job}</td><td>${a.area||'−'}</td>
@@ -2007,6 +2198,7 @@ function renderAgency(){
       ${a.resumeName?`<span style="font-size:9px;color:#16a34a" title="${a.resumeName}">📄有</span>`:'−'}
       ${a.cvName?`<span style="font-size:9px;color:#2563eb;margin-left:4px" title="${a.cvName}">📋有</span>`:''}
     </td>
+    <td>${a.tanto||'−'}</td>
     <td style="text-align:right;white-space:nowrap">
       <button class="btn btn-outline" style="padding:2px 9px;font-size:10px;margin-right:3px" onclick="openAG(${a.id})"><i class="ti ti-edit" aria-hidden="true"></i> 編集</button>
       <button class="btn-sm-red" style="padding:4px 9px" onclick="deleteAG(${a.id})"><i class="ti ti-trash" aria-hidden="true"></i> 削除</button>
@@ -2023,35 +2215,117 @@ function renderAgency(){
       </div>
     </div>
     ${totalFee>0?`<div style="background:#fffbeb;border:0.5px solid #fde68a;border-radius:7px;padding:8px 12px;margin-bottom:12px;font-size:12px;display:flex;align-items:center;gap:6px"><i class="ti ti-coins" style="color:#d97706"></i><span style="color:#92400e">累計手数料（入社確定分）：</span><strong style="color:#92400e;font-size:14px">¥${totalFee.toLocaleString()}</strong></div>`:''}
+    <div class="filter-panel">
+      <div class="filter-row">
+        <div class="filter-item" style="min-width:110px">
+          <label>候補者名</label>
+          <input type="text" value="${f.name}" placeholder="候補者名で検索" oninput="updateFilter('ag','name',this.value,renderAgency)">
+        </div>
+        <div class="filter-item" style="min-width:130px">
+          <label>年齢</label>
+          <div style="display:flex;gap:3px;align-items:center">
+            <input type="number" value="${f.ageMin}" placeholder="下限" style="width:55px" oninput="updateFilter('ag','ageMin',this.value,renderAgency)">
+            <span style="font-size:10px;color:var(--tx1)">〜</span>
+            <input type="number" value="${f.ageMax}" placeholder="上限" style="width:55px" oninput="updateFilter('ag','ageMax',this.value,renderAgency)">
+          </div>
+        </div>
+        <div class="filter-item">
+          <label>応募求人</label>
+          <input type="text" value="${f.job}" placeholder="求人名で検索" oninput="updateFilter('ag','job',this.value,renderAgency)">
+        </div>
+        <div class="filter-item">
+          <label>応募エリア</label>
+          <input type="text" value="${f.area}" placeholder="エリアで検索" oninput="updateFilter('ag','area',this.value,renderAgency)">
+        </div>
+        <div class="filter-item">
+          <label>職種区分</label>
+          <select onchange="updateFilter('ag','shoku',this.value,renderAgency)">
+            <option value="">すべて</option>
+            ${shokuMaster.map(s=>`<option value="${s}" ${f.shoku===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>現場担当者</label>
+          <select onchange="updateFilter('ag','tanto',this.value,renderAgency)">
+            <option value="">すべて</option>
+            ${tantoMaster.map(t=>`<option value="${t}" ${f.tanto===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-item">
+          <label>&nbsp;</label>
+          <button class="btn btn-outline" style="font-size:11px;padding:5px 10px" onclick="resetFilter('ag',renderAgency)">フィルタ解除${activeCnt>0?`<span class="filter-badge">${activeCnt}</span>`:''}</button>
+        </div>
+      </div>
+    </div>
     <div class="tw"><table>
       <thead><tr style="background:#fffbe6">
-        <th style="color:#854d0e">エージェント</th><th style="color:#854d0e">候補者名</th><th style="color:#854d0e">年齢</th>
-        <th style="color:#854d0e">応募求人</th><th style="color:#854d0e">応募エリア</th>
-        <th style="color:#854d0e">職種区分</th><th style="color:#854d0e">入社予定日</th><th style="color:#854d0e">ステータス</th>
-        <th style="color:#854d0e">手数料率</th><th style="color:#854d0e">手数料</th><th style="color:#854d0e">書類</th><th></th>
+        <th style="color:#854d0e">エージェント</th>
+        <th style="color:#854d0e">候補者名</th>
+        <th style="color:#854d0e">年齢</th>
+        <th style="color:#854d0e">応募求人</th>
+        <th style="color:#854d0e">応募エリア</th>
+        <th style="color:#854d0e">職種区分</th>
+        <th style="color:#854d0e">入社予定日</th><th style="color:#854d0e">ステータス</th>
+        <th style="color:#854d0e">手数料率</th><th style="color:#854d0e">手数料</th><th style="color:#854d0e">書類</th>
+        <th style="color:#854d0e">現場担当者</th>
+        <th></th>
       </tr></thead>
-      <tbody>${rows||`<tr><td colspan="12" style="text-align:center;color:var(--tx1);padding:20px">「新規追加」またはCSVインポートで追加してください</td></tr>`}</tbody>
+      <tbody>${rows||`<tr><td colspan="13" style="text-align:center;color:var(--tx1);padding:20px">${activeCnt>0?'条件に一致する候補者がいません':'「新規追加」またはCSVインポートで追加してください'}</td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
 
-// ===== RENDER: 職種マスター =====
+// ===== RENDER: マスター（職種・担当者） =====
 function renderMaster(){
+  const isShoku=masterTab==='shoku';
   document.getElementById('main').innerHTML=`<div class="pg">
-    <div class="ph"><div><h2>職種マスター</h2><p>職種区分の追加・削除</p></div></div>
+    <div class="ph">
+      <div><h2>マスター</h2><p>職種区分・現場採用担当者の登録管理</p></div>
+    </div>
+    <div class="atab-wrap">
+      <button class="atab ${isShoku?'on':''}" onclick="masterTab='shoku';renderMaster()">職種マスター</button>
+      <button class="atab ${!isShoku?'on':''}" onclick="masterTab='tanto';renderMaster()">担当者マスター</button>
+    </div>
+    ${isShoku?`
     <div class="sc">
-      <div class="sc-t">現在の職種一覧</div>
+      <div class="sc-t">現在の職種一覧（↑↓で表示順を変更できます）</div>
       <div id="shoku-list" style="margin-bottom:12px">
         ${shokuMaster.map((s,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--bd2)">
-          <span class="shoku-tag">${s}</span><span style="flex:1;font-size:12px">${s}</span>
+          <div style="display:flex;flex-direction:column;gap:1px">
+            <button style="background:#fff;border:0.5px solid var(--bd1);border-radius:3px;color:${i===0?'var(--tx2)':'#2563eb'};padding:0;width:18px;height:14px;font-size:9px;line-height:14px;text-align:center;cursor:${i===0?'default':'pointer'}" onclick="moveShoku(${i},-1)" ${i===0?'disabled':''}>▲</button>
+            <button style="background:#fff;border:0.5px solid var(--bd1);border-radius:3px;color:${i===shokuMaster.length-1?'var(--tx2)':'#2563eb'};padding:0;width:18px;height:14px;font-size:9px;line-height:14px;text-align:center;cursor:${i===shokuMaster.length-1?'default':'pointer'}" onclick="moveShoku(${i},1)" ${i===shokuMaster.length-1?'disabled':''}>▼</button>
+          </div>
+          <span style="font-size:10px;color:var(--tx2);width:18px">${i+1}</span>
+          <span class="shoku-tag ${isJimu(s)?'jimu':'genba'}">${s}</span><span style="flex:1;font-size:12px">${s}</span>
           <button class="btn-sm-red" onclick="deleteShoku(${i})"><i class="ti ti-trash" aria-hidden="true"></i> 削除</button>
         </div>`).join('')}
       </div>
       <div style="display:flex;gap:8px">
-        <input id="shoku-new" type="text" placeholder="新しい職種名を入力" style="flex:1;border:0.5px solid var(--bd1);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;background:#fff">
+        <input id="shoku-new" type="text" placeholder="新しい職種名を入力" style="flex:1;border:0.5px solid var(--bd1);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;background:#fff" onkeydown="if(event.key==='Enter')addShoku()">
         <button class="btn btn-blue" onclick="addShoku()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
       </div>
     </div>
+    `:`
+    <div class="sc">
+      <div class="sc-t">現在の現場採用担当者一覧（↑↓で表示順を変更できます）</div>
+      <div id="tanto-list" style="margin-bottom:12px">
+        ${tantoMaster.length===0?'<p style="font-size:12px;color:var(--tx1)">登録なし</p>':tantoMaster.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--bd2)">
+          <div style="display:flex;flex-direction:column;gap:1px">
+            <button style="background:#fff;border:0.5px solid var(--bd1);border-radius:3px;color:${i===0?'var(--tx2)':'#2563eb'};padding:0;width:18px;height:14px;font-size:9px;line-height:14px;text-align:center;cursor:${i===0?'default':'pointer'}" onclick="moveTanto(${i},-1)" ${i===0?'disabled':''}>▲</button>
+            <button style="background:#fff;border:0.5px solid var(--bd1);border-radius:3px;color:${i===tantoMaster.length-1?'var(--tx2)':'#2563eb'};padding:0;width:18px;height:14px;font-size:9px;line-height:14px;text-align:center;cursor:${i===tantoMaster.length-1?'default':'pointer'}" onclick="moveTanto(${i},1)" ${i===tantoMaster.length-1?'disabled':''}>▼</button>
+          </div>
+          <span style="font-size:10px;color:var(--tx2);width:18px">${i+1}</span>
+          <span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500;background:#f5f3ff;color:#6d28d9;border:0.5px solid #c4b5fd">${t}</span>
+          <span style="flex:1;font-size:12px">${t}</span>
+          <button class="btn-sm-red" onclick="deleteTanto(${i})"><i class="ti ti-trash" aria-hidden="true"></i> 削除</button>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="tanto-new" type="text" placeholder="新しい担当者名を入力（例：田尾）" style="flex:1;border:0.5px solid var(--bd1);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;background:#fff" onkeydown="if(event.key==='Enter')addTanto()">
+        <button class="btn btn-blue" onclick="addTanto()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
+      </div>
+    </div>
+    `}
   </div>`;
 }
 function addShoku(){
@@ -2061,6 +2335,32 @@ function addShoku(){
   shokuMaster.push(val);renderMaster();saveToStorage();showToast(`「${val}」を追加しました`);
 }
 function deleteShoku(i){const name=shokuMaster[i];shokuMaster.splice(i,1);renderMaster();saveToStorage();showToast(`「${name}」を削除しました`);}
+// 職種マスターの並び替え（dir: -1=上へ, 1=下へ）
+function moveShoku(i,dir){
+  const j=i+dir;
+  if(j<0||j>=shokuMaster.length) return;
+  [shokuMaster[i],shokuMaster[j]]=[shokuMaster[j],shokuMaster[i]];
+  renderMaster();saveToStorage();
+}
+
+// 現場採用担当者マスター
+function addTanto(){
+  const val=document.getElementById('tanto-new').value.trim();
+  if(!val){showToast('担当者名を入力してください');return;}
+  if(tantoMaster.includes(val)){showToast('すでに存在します');return;}
+  tantoMaster.push(val);renderMaster();saveToStorage();showToast(`「${val}」を追加しました`);
+}
+function deleteTanto(i){const name=tantoMaster[i];tantoMaster.splice(i,1);renderMaster();saveToStorage();showToast(`「${name}」を削除しました`);}
+// 担当者マスターの並び替え（dir: -1=上へ, 1=下へ）
+function moveTanto(i,dir){
+  const j=i+dir;
+  if(j<0||j>=tantoMaster.length) return;
+  [tantoMaster[i],tantoMaster[j]]=[tantoMaster[j],tantoMaster[i]];
+  renderMaster();saveToStorage();
+}
+function tantoOpts(sel=''){
+  return ['（未設定）',...tantoMaster].map(t=>`<option value="${t}"${sel===t?' selected':''}>${t}</option>`).join('');
+}
 
 // ===== RENDER: 応募属性ダッシュボード =====
 function renderDashboard(){
