@@ -982,6 +982,9 @@ function recordPhase(id,type,phaseKey){
   const list=type==='app'?applicants:interviewees;
   const c=list.find(x=>x.id===id);if(!c)return;
 
+  // 書類選考の合格／不合格は一覧のセレクトと連動させるため排他制御する
+  const isDocKey=(phaseKey==='書類合格'||phaseKey==='書類不合格');
+
   if(c.phases[phaseKey]){
     // すでに記録済み → 解除（トグルOFF）
     delete c.phases[phaseKey];
@@ -989,6 +992,13 @@ function recordPhase(id,type,phaseKey){
     if(idx>=0) c.history.splice(idx,1);
     showToast(`${c.name}：${phaseKey} を解除しました`);
   } else {
+    // 書類選考の場合、もう一方（合格/不合格）があれば先に削除する
+    if(isDocKey){
+      const other=phaseKey==='書類合格'?'書類不合格':'書類合格';
+      delete c.phases[other];
+      const oIdx=c.history.findIndex(h=>h.phase===other);
+      if(oIdx>=0) c.history.splice(oIdx,1);
+    }
     // 未記録 → 記録（トグルON）
     c.phases[phaseKey]={date:todayStr()};
     c.history.unshift({phase:phaseKey,date:todayStr(),note:'',auto:true});
@@ -1005,6 +1015,10 @@ function recordPhase(id,type,phaseKey){
   if(cell){
     const k=Object.keys(c.phases);
     cell.innerHTML=k.length?bdg(k[k.length-1]):'<span class="bdg bg">未選考</span>';
+  }
+  // 応募者管理の一覧（書類選考セレクトボックス）も連動させる
+  if(isDocKey && type==='app'){
+    renderApplicants();
   }
   if(type==='int') renderInterview();
   updateBadges();
@@ -1431,6 +1445,11 @@ function setDocResult(id, result){
   }
   renderApplicants();
   updateBadges();
+  // 詳細モーダルが開いていれば、フェーズ記録ボタンの表示も更新（連動）
+  if(document.getElementById('detail-modal').style.display!=='none' && currentDetailId===id){
+    renderPhases('dm-phases',c,id,currentDetailType);
+    renderHistory('dm-hist',c,currentDetailType==='app');
+  }
   saveToStorage();
 }
 function renderApplicants(){
