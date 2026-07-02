@@ -31,6 +31,8 @@
 .dc-l{font-size:10px;color:var(--tx1);margin-bottom:3px}
 .dc-v{font-size:20px;font-weight:500}
 .tw{background:var(--bg0);border:0.5px solid var(--bd2);border-radius:var(--r-lg);overflow:hidden;margin-bottom:12px}
+.tw-app{overflow:visible}
+.tw-app thead th{position:sticky;top:0;z-index:5;background:var(--bg1);box-shadow:0 1px 0 var(--bd2)}
 table{width:100%;border-collapse:collapse;font-size:11px}
 thead tr{background:var(--bg1)}
 th{padding:8px 10px;font-weight:500;color:var(--tx1);text-align:left;border-bottom:0.5px solid var(--bd2);white-space:nowrap}
@@ -911,14 +913,20 @@ function handleCSV(file){
     document.getElementById('csv-ok').style.display='inline-flex';
   }});
 }
+// 応募者を応募日が新しい順に並び替える（インポート・エクスポート時に使用）
+function sortApplicantsByDateDesc(){
+  applicants.sort((a,b)=>(b.appliedAt||'').localeCompare(a.appliedAt||''));
+}
 function confirmCSV(){
   applicants=[...applicants,...csvPending];
+  sortApplicantsByDateDesc();
   closeCSV();renderApplicants();updateBadges();
   showToast(`${csvPending.length}件をインポートしました`);csvPending=[];
   saveToStorage();
 }
 function exportApplicants(){
   if(!applicants.length){showToast('データがありません');return;}
+  sortApplicantsByDateDesc();
   const h=['氏名','電話番号','メールアドレス','生年月日','年齢','応募日','職種名','応募エリア','職種区分','居住地','経験','学歴','応募経路','採用見込','現ステータス','現場担当者','メモ'];
   const rows=applicants.map(c=>{
     const k=Object.keys(c.phases);
@@ -1551,7 +1559,7 @@ function renderApplicants(){
         </div>
       </div>
     </div>
-    <div class="tw"><table>
+    <div class="tw tw-app"><table>
       <thead><tr>
         <th>氏名</th><th>年齢</th><th>電話番号</th><th>応募求人</th><th>応募エリア</th>
         <th>職種区分</th><th>応募日</th><th>書類選考</th><th>現場担当者</th>
