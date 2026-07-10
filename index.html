@@ -212,6 +212,7 @@ tbody tr:hover td{background:var(--bg1)}
     <nav class="sb-nav">
       <button class="nb on" onclick="sw('applicants',this)"><i class="ti ti-clipboard-list" aria-hidden="true"></i>応募者管理<span class="nb-badge" id="badge-app">0</span></button>
       <button class="nb" onclick="sw('interview',this)"><i class="ti ti-calendar-event" aria-hidden="true"></i>面接管理<span class="nb-badge" id="badge-int" style="display:none"></span></button>
+      <button class="nb" onclick="sw('decision',this)"><i class="ti ti-user-check" aria-hidden="true"></i>決定者管理</button>
       <button class="nb" onclick="sw('agency',this)"><i class="ti ti-users" aria-hidden="true"></i>人材紹介管理</button>
       <button class="nb" onclick="sw('agencyreport',this)"><i class="ti ti-report-analytics" aria-hidden="true"></i>紹介会社分析</button>
       <button class="nb" onclick="sw('analytics',this)"><i class="ti ti-chart-bar" aria-hidden="true"></i>コスト分析</button>
@@ -387,6 +388,38 @@ tbody tr:hover td{background:var(--bg1)}
         <button class="cbtn" onclick="closeIM()">閉じる</button>
         <button class="btn btn-blue" onclick="saveIMData()">保存</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 決定者管理モーダル -->
+<div id="decision-modal" class="ov" style="display:none">
+  <div class="mo mo-sm">
+    <div class="mh"><h3 id="dec-name"></h3><button class="xb" onclick="closeDecisionModal()">&times;</button></div>
+    <div class="mb">
+      <div class="note-box">⚠ 「調整給」以外は必須項目です（未入力では保存できません）</div>
+      <div class="fr"><label>配属先責任者 *</label><select id="dec-dept"></select></div>
+      <div class="fr3">
+        <div class="fr" style="margin:0"><label>基本給（円）*</label><input id="dec-kihon" type="number" min="0" placeholder="250000"></div>
+        <div class="fr" style="margin:0"><label>固定残業代（円）*</label><input id="dec-kotei" type="number" min="0" placeholder="30000"></div>
+        <div class="fr" style="margin:0"><label>調整給（円）</label><input id="dec-chosei" type="number" min="0" placeholder="任意"></div>
+      </div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label>入社日 *</label><input id="dec-joindate" type="date"></div>
+        <div class="fr" style="margin:0"><label>入社手続き場所 *</label>
+          <select id="dec-location">
+            <option value="（未設定）">選択してください</option>
+            <option value="本社">本社</option>
+            <option value="営業所">営業所</option>
+            <option value="自宅">自宅</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr" style="margin-bottom:0"><label>備考欄</label><textarea id="dec-memo" rows="3" placeholder="特記事項があれば入力してください"></textarea></div>
+    </div>
+    <div class="mf">
+      <button class="cbtn" onclick="closeDecisionModal()">閉じる</button>
+      <button class="btn btn-blue" onclick="saveDecisionData()">保存</button>
     </div>
   </div>
 </div>
@@ -1244,6 +1277,106 @@ function deleteInterviewee(){
   renderInterview();
   saveToStorage();
   showToast(`${c.name} を面接管理から削除しました`);
+}
+
+// ===== 決定者管理（内定者のみ自動表示） =====
+function decisionMissing(c){
+  const d=c.decision||{};
+  return !d.dept || d.kihon===undefined || d.kihon==='' || d.kotei===undefined || d.kotei==='' || !c.joinDate || !d.location || d.location==='（未設定）';
+}
+function renderDecision(){
+  const decided=interviewees.filter(c=>c.phases&&c.phases['内定']);
+  const hiredCnt=decided.filter(c=>c.phases['入社']).length;
+  const rows=decided.map(c=>{
+    const d=c.decision||{};
+    const hired=!!c.phases['入社'];
+    const missing=decisionMissing(c);
+    const statusBdg=hired
+      ?'<span class="bdg" style="background:#fef08a;color:#713f12;border-color:#fde047">入社済み</span>'
+      :(missing?'<span class="bdg by">未入力あり</span>':'<span class="bdg bb">入社待ち</span>');
+    return '<tr'+(hired?' style="background:#fef9c3"':'')+'>'
+      +'<td style="font-weight:500">'+c.name+'</td>'
+      +'<td>'+(c.shoku&&c.shoku!=='（未設定）'?c.shoku:'−')+'</td>'
+      +'<td>'+(d.dept||'−')+'</td>'
+      +'<td>'+(d.kihon!==undefined&&d.kihon!==''?'¥'+Number(d.kihon).toLocaleString():'−')+'</td>'
+      +'<td>'+(d.kotei!==undefined&&d.kotei!==''?'¥'+Number(d.kotei).toLocaleString():'−')+'</td>'
+      +'<td>'+(d.chosei!==undefined&&d.chosei!==''?'¥'+Number(d.chosei).toLocaleString():'−')+'</td>'
+      +'<td>'+(c.joinDate||'−')+'</td>'
+      +'<td>'+(d.location&&d.location!=='（未設定）'?d.location:'−')+'</td>'
+      +'<td>'+statusBdg+'</td>'
+      +'<td style="text-align:right;white-space:nowrap">'
+        +'<button class="btn btn-outline" style="font-size:10px;padding:3px 9px;margin-right:4px" onclick="openDecisionModal('+c.id+')">詳細入力</button>'
+        +(hired
+          ?'<button class="btn-sm-red" onclick="toggleHiredStatus('+c.id+')">入社取消</button>'
+          :'<button class="btn btn-green" style="font-size:10px;padding:3px 9px" onclick="toggleHiredStatus('+c.id+')">入社済みにする</button>')
+      +'</td></tr>';
+  }).join('');
+
+  document.getElementById('main').innerHTML=
+    '<div class="pg">'
+    +'<div class="ph"><div><h2>決定者管理</h2><p>内定を記録した候補者を自動表示し、配属・給与・入社情報を管理します</p></div></div>'
+    +'<div class="dash-grid-2">'
+      +'<div class="dc"><div class="dc-l">内定者数</div><div class="dc-v" style="color:#7c3aed">'+decided.length+'</div></div>'
+      +'<div class="dc"><div class="dc-l">入社済み</div><div class="dc-v" style="color:#a16207">'+hiredCnt+'</div></div>'
+    +'</div>'
+    +(decided.length
+      ?'<div class="tw"><table><thead><tr>'
+        +'<th>氏名</th><th>職種区分</th><th>配属先責任者</th><th>基本給</th><th>固定残業代</th><th>調整給</th><th>入社日</th><th>入社手続き場所</th><th>ステータス</th><th style="text-align:right">操作</th>'
+        +'</tr></thead><tbody>'+rows+'</tbody></table></div>'
+      :'<p style="font-size:12px;color:var(--tx1)">内定者がいません。面接管理で「内定」を記録すると、ここに自動で表示されます。</p>')
+    +'</div>';
+}
+
+let currentDecisionId=null;
+function openDecisionModal(id){
+  const c=interviewees.find(x=>x.id===id);if(!c)return;
+  currentDecisionId=id;
+  const d=c.decision||{};
+  document.getElementById('dec-name').textContent=c.name+' さんの決定情報';
+  document.getElementById('dec-dept').innerHTML=tantoOpts(d.dept||'（未設定）');
+  document.getElementById('dec-kihon').value=(d.kihon!==undefined&&d.kihon!=='')?d.kihon:'';
+  document.getElementById('dec-kotei').value=(d.kotei!==undefined&&d.kotei!=='')?d.kotei:'';
+  document.getElementById('dec-chosei').value=(d.chosei!==undefined&&d.chosei!=='')?d.chosei:'';
+  document.getElementById('dec-joindate').value=c.joinDate||'';
+  document.getElementById('dec-location').value=d.location||'（未設定）';
+  document.getElementById('dec-memo').value=d.memo||'';
+  ['dec-dept','dec-kihon','dec-kotei','dec-joindate','dec-location'].forEach(fid=>{document.getElementById(fid).style.borderColor='';});
+  document.getElementById('decision-modal').style.display='flex';
+}
+function closeDecisionModal(){document.getElementById('decision-modal').style.display='none';}
+
+function saveDecisionData(){
+  const c=interviewees.find(x=>x.id===currentDecisionId);if(!c)return;
+  const dept=document.getElementById('dec-dept').value.trim();
+  const deptVal=(dept==='（未設定）')?'':dept;
+  const kihon=document.getElementById('dec-kihon').value;
+  const kotei=document.getElementById('dec-kotei').value;
+  const chosei=document.getElementById('dec-chosei').value;
+  const joinDate=document.getElementById('dec-joindate').value;
+  const location=document.getElementById('dec-location').value;
+  const memo=document.getElementById('dec-memo').value;
+
+  let ok=true;
+  const mark=(fid,valid)=>{document.getElementById(fid).style.borderColor=valid?'':'#dc2626';if(!valid)ok=false;};
+  mark('dec-dept',!!deptVal);
+  mark('dec-kihon',kihon!==''&&Number(kihon)>=0);
+  mark('dec-kotei',kotei!==''&&Number(kotei)>=0);
+  mark('dec-joindate',!!joinDate);
+  mark('dec-location',!!location&&location!=='（未設定）');
+  if(!ok){showToast('必須項目を入力してください（調整給以外は必須）');return;}
+
+  c.decision={dept:deptVal,kihon:Number(kihon),kotei:Number(kotei),chosei:chosei===''?'':Number(chosei),location,memo};
+  c.joinDate=joinDate;
+  closeDecisionModal();
+  renderDecision();
+  saveToStorage();
+  showToast('決定情報を保存しました');
+}
+
+// 入社済みステータスの切替（トグルすると行が黄色になる）
+function toggleHiredStatus(id){
+  recordPhase(id,'int','入社');
+  renderDecision();
 }
 
 // エージェント会社マスター
@@ -2887,6 +3020,7 @@ function sw(id,btn){
   btn.classList.add('on');
   if(id==='applicants') renderApplicants();
   else if(id==='interview') renderInterview();
+  else if(id==='decision') renderDecision();
   else if(id==='analytics') renderAnalytics();
   else if(id==='dashboard') renderDashboard();
   else if(id==='agency') renderAgency();
