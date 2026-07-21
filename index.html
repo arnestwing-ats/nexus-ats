@@ -299,6 +299,7 @@ tbody tr:hover td{background:var(--bg1)}
       <div class="det-2col">
         <div class="det-box">
           <div class="det-label">選考フェーズ記録</div>
+          <div id="dm-current-phase" style="margin-bottom:8px"></div>
           <div id="dm-phases"></div>
           <div style="margin-top:8px">
             <button class="btn btn-green" style="width:100%" id="dm-move-btn" onclick="moveToInterview()">
@@ -995,6 +996,16 @@ function renderPhases(elId,c,id,type){
   `).join('');
 }
 
+// ★ 現在の選考フェーズ（面接管理で記録された内容も含めた最新フェーズ）をバッジ表示
+// 応募者管理の詳細タブに表示し、面接管理側の変更とも連動させる
+function renderCurrentPhase(elId,c){
+  const el=document.getElementById(elId);if(!el)return;
+  const k=Object.keys(c.phases);
+  el.innerHTML=k.length
+    ?`<div style="font-size:10px;color:var(--tx1);margin-bottom:4px">現在の選考フェーズ（面接管理の記録と連動）</div>${bdg(k[k.length-1])}`
+    :'';
+}
+
 // ★ 履歴描画（削除ボタン付き）
 function renderHistory(elId,c,isApp){
   const el=document.getElementById(elId);if(!el)return;
@@ -1050,6 +1061,7 @@ function recordPhase(id,type,phaseKey){
 
   if(document.getElementById('detail-modal').style.display!='none'){
     renderPhases('dm-phases',c,id,type);renderHistory('dm-hist',c,type==='app');
+    renderCurrentPhase('dm-current-phase',c);
   }
   if(document.getElementById('int-modal').style.display!='none'){
     renderPhases('im-phases',c,id,'int');renderHistory('im-hist',c,false);
@@ -1093,6 +1105,7 @@ function openDM(id){
   document.getElementById('dm-cv-label').textContent=c.cvName||'未添付';
   renderPhases('dm-phases',c,id,currentDetailType);
   renderHistory('dm-hist',c,currentDetailType==='app');
+  renderCurrentPhase('dm-current-phase',c);
   const mb=document.getElementById('dm-move-btn');
   if(c.inInterview){mb.innerHTML='✓ 面接管理に移動済み';mb.disabled=true;mb.style.background='#94a3b8';}
   else{mb.innerHTML='<i class="ti ti-arrow-right"></i>面接管理に移す';mb.disabled=false;mb.style.background='';}
@@ -1608,6 +1621,7 @@ function setDocResult(id, result){
   if(document.getElementById('detail-modal').style.display!=='none' && currentDetailId===id){
     renderPhases('dm-phases',c,id,currentDetailType);
     renderHistory('dm-hist',c,currentDetailType==='app');
+    renderCurrentPhase('dm-current-phase',c);
   }
   saveToStorage();
 }
