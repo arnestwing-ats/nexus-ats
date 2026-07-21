@@ -347,6 +347,8 @@ tbody tr:hover td{background:var(--bg1)}
           <div>
             <label style="font-size:10px;font-weight:500;color:#92400e;display:block;margin-bottom:3px">生年月日 *</label>
             <input type="date" id="im-birth-req" style="width:100%;border:1px solid #fbbf24;border-radius:5px;padding:4px 7px;font-size:12px;outline:none;background:#fff">
+            <input type="text" id="im-birth-text" placeholder="例: 1990/4/1 または 1990年4月1日" style="margin-top:3px;width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:3px 6px;font-size:10px;outline:none;background:#fff;color:var(--tx0)" onchange="saveBirthFromTextIM()">
+            <div style="font-size:9px;color:var(--tx1);margin-top:1px">テキスト入力も可</div>
           </div>
           <div>
             <label style="font-size:10px;font-weight:500;color:#92400e;display:block;margin-bottom:3px">職種区分 *</label>
@@ -1196,6 +1198,7 @@ function openIM(id){
   document.getElementById('im-memo').value=c.memo||'';
   // 必須項目（生年月日・職種区分）
   document.getElementById('im-birth-req').value=c.birthDate||'';
+  document.getElementById('im-birth-text').value='';
   document.getElementById('im-shoku-req').innerHTML=shokuOpts(c.shoku&&c.shoku!=='（未設定）'?c.shoku:'');
   // 面接日・入社予定日
   document.getElementById('im-intdate').value=c.intDate||'';
@@ -1211,6 +1214,21 @@ function openIM(id){
   renderHistory('im-hist',c,false);
   document.getElementById('int-modal').style.display='flex';
 }
+// テキストから生年月日をパースしてdate inputに反映（面接モーダル）
+function saveBirthFromTextIM(){
+  const raw=document.getElementById('im-birth-text').value.trim();
+  if(!raw) return;
+  const parsed=parseBirthDate(raw);
+  if(parsed){
+    document.getElementById('im-birth-req').value=parsed;
+    document.getElementById('im-birth-req').style.borderColor='';
+    document.getElementById('im-age').textContent=ageLabel(parsed);
+    document.getElementById('im-birth-text').value='';
+  } else {
+    showToast('生年月日の形式が認識できません（例: 1990/4/1）');
+  }
+}
+
 function closeIM(){document.getElementById('int-modal').style.display='none';}
 
 // 面接日をリアルタイムで保存（モーダル内の入力）
@@ -1600,23 +1618,30 @@ function renderApplicants(){
   const rows=filteredList.map(c=>{
     const isPass=!!c.phases['書類合格'];
     const isFail=!!c.phases['書類不合格'];
-    const rowStyle=isFail?'background:#f1f5f9;opacity:0.6;':'';
-    const currentVal=isPass?'書類合格':isFail?'書類不合格':'';
-    const docSel=`<select class="ss" onchange="setDocResult(${c.id},this.value)" style="font-size:10px">
-      <option value="" ${!currentVal?'selected':''}>未選考</option>
-      <option value="書類合格" ${isPass?'selected':''}>✓ 合格</option>
-      <option value="書類不合格" ${isFail?'selected':''}>✗ 不合格</option>
+    const phaseKeys=Object.keys(c.phases);
+    const latestKey=phaseKeys.length?phaseKeys[phaseKeys.length-1]:null;
+    const CLOSED_KEYS=['書類不合格','一次面接不合格','最終面接不合格','不採用','一次設定後辞退','最終設定後辞退','内定後辞退'];
+    const isClosed=phaseKeys.some(k=>CLOSED_KEYS.includes(k));
+    const rowStyle=isClosed?'background:#f1f5f9;opacity:0.6;':'';
+    // 選考フェーズ記録：まだ何も記録がなければ書類選考の合否を選べるセレクトを表示し、
+    // 記録済みなら（面接管理側の変更も含め）現在の最新フェーズをバッジで連動表示する
+    const docSel=latestKey
+      ? bdg(latestKey)
+      : `<select class="ss" onchange="setDocResult(${c.id},this.value)" style="font-size:10px">
+      <option value="" selected>未選考</option>
+      <option value="書類合格">✓ 合格</option>
+      <option value="書類不合格">✗ 不合格</option>
     </select>`;
     return `<tr style="${rowStyle}">
-      <td style="font-weight:500;${isFail?'color:#94a3b8':''}">${c.name}</td>
-      <td id="age-${c.id}" style="${isFail?'color:#94a3b8':''}">${ageLabel(c.birthDate)}</td>
-      <td style="${isFail?'color:#94a3b8':''}">${c.phone}</td>
-      <td id="job-${c.id}" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isFail?'color:#94a3b8':''}">${c.job||'−'}</td>
-      <td id="area-${c.id}" style="max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isFail?'color:#94a3b8':''}">${c.area||'−'}</td>
-      <td id="shoku-${c.id}">${c.shoku&&c.shoku!=='（未設定）'?`<span class="shoku-tag ${isJimu(c.shoku)?'jimu':'genba'}" style="${isFail?'opacity:0.4':''}">${c.shoku}</span>`:'−'}</td>
-      <td style="${isFail?'color:#94a3b8':''}">${c.appliedAt}</td>
-      <td>${docSel}</td>
-      <td style="${isFail?'color:#94a3b8':''}">${c.tanto||'−'}</td>
+      <td style="font-weight:500;${isClosed?'color:#94a3b8':''}">${c.name}</td>
+      <td id="age-${c.id}" style="${isClosed?'color:#94a3b8':''}">${ageLabel(c.birthDate)}</td>
+      <td style="${isClosed?'color:#94a3b8':''}">${c.phone}</td>
+      <td id="job-${c.id}" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isClosed?'color:#94a3b8':''}">${c.job||'−'}</td>
+      <td id="area-${c.id}" style="max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isClosed?'color:#94a3b8':''}">${c.area||'−'}</td>
+      <td id="shoku-${c.id}">${c.shoku&&c.shoku!=='（未設定）'?`<span class="shoku-tag ${isJimu(c.shoku)?'jimu':'genba'}" style="${isClosed?'opacity:0.4':''}">${c.shoku}</span>`:'−'}</td>
+      <td style="${isClosed?'color:#94a3b8':''}">${c.appliedAt}</td>
+      <td id="phase-${c.id}">${docSel}</td>
+      <td style="${isClosed?'color:#94a3b8':''}">${c.tanto||'−'}</td>
       <td style="text-align:right"><button class="btn btn-outline" style="padding:3px 8px;font-size:10px" onclick="openDM(${c.id})">詳細</button></td>
     </tr>`;
   }).join('');
@@ -1695,7 +1720,7 @@ function renderApplicants(){
     <div class="tw tw-app"><table>
       <thead><tr>
         <th>氏名</th><th>年齢</th><th>電話番号</th><th>応募求人</th><th>応募エリア</th>
-        <th>職種区分</th><th>応募日</th><th>書類選考</th><th>現場担当者</th>
+        <th>職種区分</th><th>応募日</th><th>選考フェーズ記録</th><th>現場担当者</th>
         <th style="text-align:right">詳細</th>
       </tr></thead>
       <tbody>${rows||`<tr><td colspan="10" style="text-align:center;color:var(--tx1);padding:24px">${activeCnt>0?'条件に一致する応募者がいません':'CSVインポートで応募者を追加してください'}</td></tr>`}</tbody>
