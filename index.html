@@ -1048,15 +1048,25 @@ function recordPhase(id,type,phaseKey){
   } else {
     // 書類選考の場合、もう一方（合格/不合格）があれば先に削除する
     if(isDocKey){
-      const other=phaseKey==='書類合格'?'書類不合格':'書類合格';
-      delete c.phases[other];
-      const oIdx=c.history.findIndex(h=>h.phase===other);
+      const otherKey=phaseKey==='書類合格'?'書類不合格':'書類合格';
+      delete c.phases[otherKey];
+      const oIdx=c.history.findIndex(h=>h.phase===otherKey);
       if(oIdx>=0) c.history.splice(oIdx,1);
     }
     // 未記録 → 記録（トグルON）
     c.phases[phaseKey]={date:todayStr()};
     c.history.unshift({phase:phaseKey,date:todayStr(),note:'',auto:true});
     showToast(`${c.name}：${phaseKey}`);
+  }
+
+  // ★ 応募者管理・面接管理の双方に同一候補者(同一ID)のレコードが存在する場合、
+  //   参照が分かれていても選考フェーズ・履歴・移動フラグを必ず同期させる
+  const counterpartList=type==='app'?interviewees:applicants;
+  const counterpart=counterpartList.find(x=>x.id===id);
+  if(counterpart && counterpart!==c){
+    counterpart.phases=c.phases;
+    counterpart.history=c.history;
+    counterpart.inInterview=c.inInterview;
   }
 
   if(document.getElementById('detail-modal').style.display!='none'){
@@ -1071,8 +1081,8 @@ function recordPhase(id,type,phaseKey){
     const k=Object.keys(c.phases);
     cell.innerHTML=k.length?bdg(k[k.length-1]):'<span class="bdg bg">未選考</span>';
   }
-  // 応募者管理の一覧（書類選考セレクトボックス）も連動させる
-  if(isDocKey && type==='app'){
+  // 応募者管理の一覧（選考フェーズ記録）も連動させる（書類選考に限らず全フェーズで再描画）
+  if(type==='app'){
     renderApplicants();
   }
   if(type==='int') renderInterview();
@@ -1617,6 +1627,13 @@ function setDocResult(id, result){
   }
   renderApplicants();
   updateBadges();
+  // ★ 面接管理側に同一候補者(同一ID)のレコードが存在する場合、参照が分かれていてもフェーズ・履歴を同期させる
+  const counterpart=interviewees.find(x=>x.id===id);
+  if(counterpart && counterpart!==c){
+    counterpart.phases=c.phases;
+    counterpart.history=c.history;
+    counterpart.inInterview=c.inInterview;
+  }
   // 詳細モーダルが開いていれば、フェーズ記録ボタンの表示も更新（連動）
   if(document.getElementById('detail-modal').style.display!=='none' && currentDetailId===id){
     renderPhases('dm-phases',c,id,currentDetailType);
