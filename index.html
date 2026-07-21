@@ -1034,6 +1034,7 @@ function deleteHistory(id,type,idx){
   if(document.getElementById('detail-modal').style.display!='none') renderHistory('dm-hist',c,true);
   if(document.getElementById('int-modal').style.display!='none') renderHistory('im-hist',c,false);
   showToast('履歴を削除しました');
+  saveToStorage();
 }
 
 function recordPhase(id,type,phaseKey){
@@ -1150,6 +1151,7 @@ function attachFile(type,input){
     if(type==='resume'){c.resumeName=file.name;c.resumeData=e.target.result;document.getElementById('dm-resume-label').textContent='✓ '+file.name;}
     else{c.cvName=file.name;c.cvData=e.target.result;document.getElementById('dm-cv-label').textContent='✓ '+file.name;}
     showToast(`${file.name} を添付しました`);
+    saveToStorage();
   };
   reader.readAsDataURL(file);
 }
@@ -1779,6 +1781,7 @@ function updateIntDateInline(id,val){
   c.intDate=val;
   const cell=document.getElementById(`intdate-${c.id}`);
   if(cell) cell.innerHTML=intDateCellHTML(c);
+  saveToStorage();
 }
 
 // ===== RENDER: 面接管理 =====
@@ -2899,6 +2902,7 @@ function importUsersFromCSV(file){
     });
     renderUserList();
     showToast(`${added}件のユーザーをインポートしました`);
+    saveToStorage();
   }});
 }
 function addUser(){
