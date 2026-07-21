@@ -768,6 +768,7 @@ const PHASE_DEF_APP=[
   {section:'書類選考',actions:[
     {key:'書類合格',label:'✓ 合格',cls:'p-pass'},
     {key:'書類不合格',label:'✗ 不合格',cls:'p-fail'},
+    {key:'書類選考辞退',label:'辞退',cls:'p-withdraw'},
   ]},
   {section:'一次面接',actions:[
     {key:'一次面接設定',label:'日程設定',cls:'p-set'},
@@ -775,6 +776,7 @@ const PHASE_DEF_APP=[
     {key:'一次面接実施',label:'実施',cls:'p-done'},
     {key:'一次面接合格',label:'✓ 合格',cls:'p-pass'},
     {key:'一次面接不合格',label:'✗ 不合格',cls:'p-fail'},
+    {key:'一次設定前辞退',label:'日程設定前辞退',cls:'p-withdraw'},
   ]},
   {section:'最終面接',actions:[
     {key:'最終面接設定',label:'日程設定',cls:'p-set'},
@@ -794,6 +796,7 @@ const PHASE_DEF_INT=[
   {section:'書類選考',actions:[
     {key:'書類合格',label:'✓ 合格',cls:'p-pass'},
     {key:'書類不合格',label:'✗ 不合格',cls:'p-fail'},
+    {key:'書類選考辞退',label:'辞退',cls:'p-withdraw'},
   ]},
   {section:'一次面接',actions:[
     {key:'一次面接設定',label:'日程設定',cls:'p-set'},
@@ -801,6 +804,7 @@ const PHASE_DEF_INT=[
     {key:'一次面接実施',label:'実施',cls:'p-done'},
     {key:'一次面接合格',label:'✓ 合格',cls:'p-pass'},
     {key:'一次面接不合格',label:'✗ 不合格',cls:'p-fail'},
+    {key:'一次設定前辞退',label:'日程設定前辞退',cls:'p-withdraw'},
   ]},
   {section:'最終面接',actions:[
     {key:'最終面接設定',label:'日程設定',cls:'p-set'},
@@ -875,14 +879,14 @@ function showToast(msg){
   setTimeout(()=>t.className='toast',2600);
 }
 function scolor(s){
-  const m={'書類合格':'#16a34a','一次面接合格':'#16a34a','最終面接合格':'#16a34a','内定':'#16a34a','入社':'#15803d','書類不合格':'#dc2626','一次面接不合格':'#dc2626','最終面接不合格':'#dc2626','不採用':'#dc2626','一次設定後辞退':'#7c3aed','最終設定後辞退':'#7c3aed','内定後辞退':'#7c3aed','一次面接設定':'#0891b2','最終面接設定':'#0891b2','一次面接実施':'#64748b','最終面接実施':'#64748b','書類保留':'#d97706'};
+  const m={'書類合格':'#16a34a','一次面接合格':'#16a34a','最終面接合格':'#16a34a','内定':'#16a34a','入社':'#15803d','書類不合格':'#dc2626','一次面接不合格':'#dc2626','最終面接不合格':'#dc2626','不採用':'#dc2626','一次設定後辞退':'#7c3aed','最終設定後辞退':'#7c3aed','内定後辞退':'#7c3aed','書類選考辞退':'#7c3aed','一次設定前辞退':'#7c3aed','一次面接設定':'#0891b2','最終面接設定':'#0891b2','一次面接実施':'#64748b','最終面接実施':'#64748b','書類保留':'#d97706'};
   return m[s]||'#64748b';
 }
 function bdg(s){
   const pos=['書類合格','一次面接合格','最終面接合格','内定','入社','書類選考中'];
   const neg=['書類不合格','一次面接不合格','最終面接不合格','不採用','採用見送り'];
   const set=['一次面接設定','最終面接設定'];
-  const wth=['一次設定後辞退','最終設定後辞退','内定後辞退'];
+  const wth=['一次設定後辞退','最終設定後辞退','内定後辞退','書類選考辞退','一次設定前辞退'];
   let cls='bg';
   if(pos.includes(s)) cls='bgr';
   else if(neg.includes(s)) cls='br';
@@ -900,7 +904,7 @@ function updateBadges(){
   ba.style.display=appUnhandled>0?'':'none';
 
   // 面接管理：選考中（終了・入社・内定以外）のカウント
-  const CLOSED_PHASES=['書類不合格','一次面接不合格','最終面接不合格','不採用','一次設定後辞退','最終設定後辞退'];
+  const CLOSED_PHASES=['書類不合格','一次面接不合格','最終面接不合格','不採用','一次設定後辞退','最終設定後辞退','書類選考辞退','一次設定前辞退'];
   const intActive=interviewees.filter(c=>
     !CLOSED_PHASES.some(k=>c.phases[k]) && !c.phases['入社'] && !c.phases['内定']
   ).length;
@@ -1651,7 +1655,7 @@ function renderApplicants(){
     const isFail=!!c.phases['書類不合格'];
     const phaseKeys=Object.keys(c.phases);
     const latestKey=phaseKeys.length?phaseKeys[phaseKeys.length-1]:null;
-    const CLOSED_KEYS=['書類不合格','一次面接不合格','最終面接不合格','不採用','一次設定後辞退','最終設定後辞退','内定後辞退'];
+    const CLOSED_KEYS=['書類不合格','一次面接不合格','最終面接不合格','不採用','一次設定後辞退','最終設定後辞退','内定後辞退','書類選考辞退','一次設定前辞退'];
     const isClosed=phaseKeys.some(k=>CLOSED_KEYS.includes(k));
     const rowStyle=isClosed?'background:#f1f5f9;opacity:0.6;':'';
     // 選考フェーズ記録：まだ何も記録がなければ書類選考の合否を選べるセレクトを表示し、
@@ -1783,7 +1787,7 @@ function rowStatus(c){
   const phases=Object.keys(c.phases);
   // 選考終了系（不合格・辞退・不採用）
   const CLOSED=['書類不合格','一次面接不合格','最終面接不合格','不採用',
-                '一次設定後辞退','最終設定後辞退'];
+                '一次設定後辞退','最終設定後辞退','書類選考辞退','一次設定前辞退'];
   if(CLOSED.some(k=>c.phases[k])) return 'closed';
   // 入社（選考終了・黄色）
   if(c.phases['入社']) return 'hired';
