@@ -621,6 +621,7 @@ async function saveToStorage(keys){
   }catch(e){}
   // スプレッドシートには指定されたキーだけを送信（高速化）
   pendingCloudSaves++;
+  let ok=false;
   try{
     const full=buildSaveData();
     let payload;
@@ -630,13 +631,28 @@ async function saveToStorage(keys){
     } else {
       payload=full; // 互換：指定なしなら全部送る
     }
-    await fetch(GAS_URL,{
+    const res=await fetch(GAS_URL,{
       method:'POST',
       headers:{'Content-Type':'text/plain'},
       body:JSON.stringify({action:'write',data:payload})
     });
-  }catch(e){console.warn('クラウド保存失敗（オフライン？）:',e);}
+    // ★ GAS側のレスポンス本文を確認し、エラーが返っていれば必ず画面に表示する
+    //   （以前はここをチェックしておらず、保存失敗が握りつぶされていた）
+    let resJson=null;
+    try{ resJson=await res.json(); }catch(e){}
+    if(!res.ok || (resJson && resJson.error)){
+      const msg=(resJson && resJson.error) ? resJson.error : `HTTPエラー: ${res.status}`;
+      showToast(`⚠ クラウド保存に失敗しました: ${msg}`);
+      console.error('クラウド保存失敗:',msg);
+    } else {
+      ok=true;
+    }
+  }catch(e){
+    showToast('⚠ クラウド保存に失敗しました（通信エラー・オフラインの可能性）');
+    console.warn('クラウド保存失敗（オフライン？）:',e);
+  }
   finally{ pendingCloudSaves--; }
+  return ok;
 }
 
 function buildSaveData(){
@@ -1285,6 +1301,7 @@ function saveIntDate(){
   document.getElementById('im-intdate-status').innerHTML=intDateLabel(val);
   const cell=document.getElementById(`intdate-${c.id}`);
   if(cell) cell.innerHTML=intDateCellHTML(c);
+  saveToStorage();
 }
 // 面接日テキスト入力から date input に反映
 function saveIntDateFromText(){
