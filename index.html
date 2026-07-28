@@ -601,6 +601,18 @@ const LS_KEY='nexus_ats_data'; // オフライン用バックアップとして�
 
 // スプレッドシートに保存
 // keys: 保存したい項目名の配列（省略時は全項目を保存=互換動作）
+// ★ クラウドへの保存が完了する前にページを閉じる／リロードすると、
+//   まだ古いデータのままのスプレッドシートを次回読み込み時に取得してしまい、
+//   直前の変更が消えてしまう。それを防ぐため、保存中は離脱を警告する。
+let pendingCloudSaves=0;
+window.addEventListener('beforeunload',function(e){
+  if(pendingCloudSaves>0){
+    e.preventDefault();
+    e.returnValue='保存処理が完了していません。今閉じると直前の変更が失われる可能性があります。';
+    return e.returnValue;
+  }
+});
+
 async function saveToStorage(keys){
   // localStorageには常に全データを保存（オフライン用バックアップなので軽量化不要）
   try{
@@ -608,6 +620,7 @@ async function saveToStorage(keys){
     localStorage.setItem(LS_KEY,JSON.stringify(data));
   }catch(e){}
   // スプレッドシートには指定されたキーだけを送信（高速化）
+  pendingCloudSaves++;
   try{
     const full=buildSaveData();
     let payload;
@@ -623,6 +636,7 @@ async function saveToStorage(keys){
       body:JSON.stringify({action:'write',data:payload})
     });
   }catch(e){console.warn('クラウド保存失敗（オフライン？）:',e);}
+  finally{ pendingCloudSaves--; }
 }
 
 function buildSaveData(){
@@ -957,12 +971,15 @@ function handleCSV(file){
 function sortApplicantsByDateDesc(){
   applicants.sort((a,b)=>(b.appliedAt||'').localeCompare(a.appliedAt||''));
 }
-function confirmCSV(){
+async function confirmCSV(){
+  const cnt=csvPending.length;
   applicants=[...applicants,...csvPending];
   sortApplicantsByDateDesc();
   closeCSV();renderApplicants();updateBadges();
-  showToast(`${csvPending.length}件をインポートしました`);csvPending=[];
-  saveToStorage();
+  showToast(`${cnt}件をインポートしています。保存が終わるまでリロードしないでください…`);
+  csvPending=[];
+  await saveToStorage();
+  showToast(`${cnt}件の保存が完了しました`);
 }
 function exportApplicants(){
   if(!applicants.length){showToast('データがありません');return;}
@@ -1602,7 +1619,7 @@ function handleAgCSV(file){
     document.getElementById('ag-csv-ok').style.display='inline-flex';
   }});
 }
-function confirmAgCSV(){agencies=[...agencies,...agCsvPending];closeAgCSV();renderAgency();saveToStorage();showToast(`${agCsvPending.length}件をインポートしました`);agCsvPending=[];}
+async function confirmAgCSV(){const cnt=agCsvPending.length;agencies=[...agencies,...agCsvPending];closeAgCSV();renderAgency();agCsvPending=[];showToast(`${cnt}件をインポートしています。保存が終わるまでリロードしないでください…`);await saveToStorage();showToast(`${cnt}件の保存が完了しました`);}
 
 // 応募者管理：書類選考インライン変更
 function setDocResult(id, result){
