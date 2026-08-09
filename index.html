@@ -1367,6 +1367,13 @@ function decisionMissing(c){
 }
 function renderDecision(){
   const decided=interviewees.filter(c=>c.phases&&c.phases['内定']);
+  // 入社日が遅い順（未入力は末尾）に並び替え
+  decided.sort((a,b)=>{
+    if(!a.joinDate && !b.joinDate) return 0;
+    if(!a.joinDate) return 1;
+    if(!b.joinDate) return -1;
+    return b.joinDate.localeCompare(a.joinDate);
+  });
   const hiredCnt=decided.filter(c=>c.phases['入社']).length;
   const rows=decided.map(c=>{
     const d=c.decision||{};
