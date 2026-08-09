@@ -1012,6 +1012,21 @@ function exportApplicants(){
   URL.revokeObjectURL(url);showToast('エクスポートしました');
 }
 
+// ★ CSVエクスポート共通ヘルパー（コスト分析・遷移率分析・応募属性で共用）
+function downloadCSV(headers,rows,filenamePrefix){
+  if(!rows.length){showToast('エクスポートするデータがありません');return;}
+  const esc=v=>{
+    const s=(v===null||v===undefined)?'':String(v);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const csv=[headers,...rows].map(r=>r.map(esc).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filenamePrefix+'_'+todayStr()+'.csv';a.click();
+  URL.revokeObjectURL(url);
+  showToast('エクスポートしました');
+}
+
 // ===== フェーズ描画（応募者用・面接用で定義を分ける） =====
 function renderPhases(elId,c,id,type){
   const el=document.getElementById(elId);if(!el)return;
@@ -1844,7 +1859,14 @@ function renderInterview(){
   const getLP=c=>{const k=Object.keys(c.phases);return k.length?k[k.length-1]:null;};
   const today=new Date();today.setHours(0,0,0,0);
   const f=filterState.int;
-  const filteredList=filterList(interviewees,'int');
+  const filteredList=filterList(interviewees,'int').slice().sort((a,b)=>{
+    // 選考終了（不合格・辞退・不採用）は下、選考中（内定・入社含む）は上
+    const aClosed=rowStatus(a)==='closed'?1:0;
+    const bClosed=rowStatus(b)==='closed'?1:0;
+    if(aClosed!==bClosed) return aClosed-bClosed;
+    // 同グループ内は応募日順（新しい順）
+    return (b.appliedAt||'').localeCompare(a.appliedAt||'');
+  });
   const activeCnt=filterActiveCount('int');
   const rows=filteredList.map(c=>{
     const rs=rowStatus(c);
@@ -2040,18 +2062,20 @@ function renderAnalytics(){
     const appIds=new Set(apps.map(c=>c.id));
     const appInt=interviewees.filter(c=>appIds.has(c.id));
     const offerCnt=appInt.filter(c=>c.phases['内定']).length;
-    // 決定数：入社日（joinDate）が対象月ベース
-    const decidedCnt=interviewees.filter(c=>c.phases['入社']&&(c.joinDate||'').startsWith(k)).length;
+    // 決定数：応募日（appliedAt）が対象月ベース
+    const decidedCnt=interviewees.filter(c=>c.phases['入社']&&(c.appliedAt||'').startsWith(k)).length;
     const jCPA=jimuA.length&&b.jimu?Math.round(b.jimu/jimuA.length):0;
     const gCPA=genbaA.length&&b.genba?Math.round(b.genba/genbaA.length):0;
     return {apps:apps.length,jimu:jimuA.length,genba:genbaA.length,budget:b.jimu+b.genba,jimuBgt:b.jimu,genbaBgt:b.genba,offer:offerCnt,decided:decidedCnt,jimuCPA:jCPA,genbaCPA:gCPA};
   });
   const annualMax=Math.max(...annualData.map(d=>d.apps),1);
 
-  // 職種別データ
+  // 職種別データ（全期間／選択中の期間で切替可能）
+  const shokuScope=window._shokuScope==='period'?'period':'all';
+  const shokuScopeApps=shokuScope==='period'?monthApps:applicants;
   const shokuData=shokuMaster.map(s=>{
-    const cnt=applicants.filter(c=>c.shoku===s).length;
-    const pass=applicants.filter(c=>c.shoku===s&&c.phases['書類合格']).length;
+    const cnt=shokuScopeApps.filter(c=>c.shoku===s).length;
+    const pass=shokuScopeApps.filter(c=>c.shoku===s&&c.phases['書類合格']).length;
     return {s,cnt,pass};
   }).filter(d=>d.cnt>0).sort((a,b)=>b.cnt-a.cnt);
   const shokuMax=Math.max(...shokuData.map(d=>d.cnt),1);
@@ -2059,6 +2083,7 @@ function renderAnalytics(){
   document.getElementById('main').innerHTML=`<div class="pg">
     <div class="ph">
       <div><h2>コスト分析</h2><p>広告費・応募単価・決定単価の可視化</p></div>
+      <button class="btn btn-outline" onclick="exportAnalyticsCSV()"><i class="ti ti-download" aria-hidden="true"></i>エクスポート</button>
     </div>
 
     <!-- 年月セレクタ（年間タブは年のみ） -->
@@ -2074,6 +2099,14 @@ function renderAnalytics(){
         <button class="atab ${analyticsTab==='shoku'?'on':''}" onclick="analyticsTab='shoku';renderAnalytics()">職種別</button>
       </div>
     </div>
+
+    ${analyticsTab==='shoku'?`
+    <!-- 職種別ビューの期間切替 -->
+    <div class="atab-wrap" style="margin-bottom:10px">
+      <button class="atab ${shokuScope==='all'?'on':''}" onclick="window._shokuScope='all';renderAnalytics()">全期間</button>
+      <button class="atab ${shokuScope==='period'?'on':''}" onclick="window._shokuScope='period';renderAnalytics()">${selY}年${selM}月のみ</button>
+    </div>
+    `:''}
 
     ${analyticsTab==='monthly'?`
     <!-- 月別ビュー：現場枠 + 事務枠を完全分離 -->
@@ -2444,7 +2477,71 @@ function renderAnalytics(){
   </div>`;
 }
 
-// エクスポート（人材紹介）
+// ★ コスト分析：現在表示中のタブ（月別／年間／職種別）に応じてCSVエクスポート
+function exportAnalyticsCSV(){
+  const now=new Date();
+  const selY=window._anaY||now.getFullYear();
+  const selM=window._anaM||(now.getMonth()+1);
+  const keyStr=getBudgetKey(selY,selM);
+
+  if(analyticsTab==='shoku'){
+    const scope=window._shokuScope==='period'?'period':'all';
+    const scopeApps=scope==='period'?applicants.filter(c=>(c.appliedAt||'').startsWith(keyStr)):applicants;
+    const data=shokuMaster.map(s=>{
+      const cnt=scopeApps.filter(c=>c.shoku===s).length;
+      const pass=scopeApps.filter(c=>c.shoku===s&&c.phases['書類合格']).length;
+      return {s,cnt,pass};
+    }).filter(d=>d.cnt>0).sort((a,b)=>b.cnt-a.cnt);
+    const scopeLabel=scope==='period'?`${selY}年${selM}月`:'全期間';
+    const headers=['職種区分','応募数','書類合格数','書類合格率(%)','対象期間'];
+    const rows=data.map(d=>[d.s,d.cnt,d.pass,d.cnt?Math.round(d.pass/d.cnt*100):0,scopeLabel]);
+    downloadCSV(headers,rows,'コスト分析_職種別');
+    return;
+  }
+
+  if(analyticsTab==='annual'){
+    const monthNames=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    const rows=Array.from({length:12},(_,i)=>{
+      const k=getBudgetKey(selY,i+1);
+      const apps=applicants.filter(c=>(c.appliedAt||'').startsWith(k));
+      const b=getBudget(selY,i+1);
+      const jimuA=apps.filter(c=>isJimu(c.shoku));
+      const genbaA=apps.filter(c=>!isJimu(c.shoku));
+      const appIds=new Set(apps.map(c=>c.id));
+      const appInt=interviewees.filter(c=>appIds.has(c.id));
+      const offerCnt=appInt.filter(c=>c.phases['内定']).length;
+      const decidedCnt=interviewees.filter(c=>c.phases['入社']&&(c.appliedAt||'').startsWith(k)).length;
+      return [monthNames[i],apps.length,genbaA.length,jimuA.length,offerCnt,decidedCnt,b.jimu+b.genba];
+    });
+    const headers=['月','応募数','現場応募','バックオフィス応募','内定数','決定数(入社・応募日ベース)','広告費合計'];
+    downloadCSV(headers,rows,`コスト分析_年間_${selY}`);
+    return;
+  }
+
+  // 月別
+  const monthApps=applicants.filter(c=>(c.appliedAt||'').startsWith(keyStr));
+  const jimuApps=monthApps.filter(c=>isJimu(c.shoku));
+  const genbaApps=monthApps.filter(c=>!isJimu(c.shoku));
+  const bgt=getBudget(selY,selM);
+  const monthIntIds=new Set(monthApps.map(c=>c.id));
+  const monthInt=interviewees.filter(c=>monthIntIds.has(c.id));
+  const jimuInt=monthInt.filter(c=>isJimu(c.shoku));
+  const genbaInt=monthInt.filter(c=>!isJimu(c.shoku));
+  const mkRow=(label,apps,ints,budget)=>{
+    const docPass=apps.filter(c=>c.phases['書類合格']).length;
+    const docFail=apps.filter(c=>c.phases['書類不合格']).length;
+    const offer=ints.filter(c=>c.phases['内定']).length;
+    const hired=ints.filter(c=>c.phases['入社']).length;
+    const cpa=apps.length&&budget?Math.round(budget/apps.length):0;
+    return [label,apps.length,docPass,docFail,offer,hired,budget,cpa];
+  };
+  const headers=['区分','応募数','書類合格','書類不合格','内定数','入社(決定)数','広告費','CPA'];
+  const rows=[
+    mkRow('現場職',genbaApps,genbaInt,bgt.genba),
+    mkRow('バックオフィス職',jimuApps,jimuInt,bgt.jimu),
+  ];
+  downloadCSV(headers,rows,`コスト分析_${selY}年${selM}月`);
+}
 function exportAgencies(){
   if(!agencies.length){showToast('データがありません');return;}
   const h=['エージェント','候補者名','年齢','生年月日','応募求人','応募エリア','職種区分','入社予定日','ステータス','手数料率','想定手数料','理論年収(万円)','求人情報','メモ'];
@@ -2658,33 +2755,63 @@ function tantoOpts(sel=''){
 
 // ===== RENDER: 応募属性ダッシュボード =====
 function renderDashboard(){
-  const total=applicants.length;
-  if(total===0){
+  if(applicants.length===0){
     document.getElementById('main').innerHTML=`<div class="pg"><div class="ph"><div><h2>応募属性ダッシュボード</h2><p>CSVインポート後にレポートが表示されます</p></div></div><div class="tw"><div style="text-align:center;padding:40px;color:var(--tx1);font-size:12px">応募者データがありません</div></div></div>`;
     return;
   }
 
+  // ★ 期間フィルタ（全期間／指定の年月、応募日ベース）
+  const now=new Date();
+  const dSelY=window._dashY||now.getFullYear();
+  const dSelM=window._dashM||(now.getMonth()+1);
+  const dScope=window._dashScope==='period'?'period':'all';
+  const dKeyStr=getBudgetKey(dSelY,dSelM);
+  const years=[2024,2025,2026,2027];
+  const monthNames=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const yearOpts=years.map(y=>`<option value="${y}" ${y===dSelY?'selected':''}>${y}年</option>`).join('');
+  const monthOpts=monthNames.map((m,i)=>`<option value="${i+1}" ${(i+1)===dSelM?'selected':''}>${m}</option>`).join('');
+
+  const dApplicants=dScope==='period'?applicants.filter(c=>(c.appliedAt||'').startsWith(dKeyStr)):applicants;
+  const dApplicantIds=new Set(dApplicants.map(c=>c.id));
+  const dInterviewees=dScope==='period'?interviewees.filter(c=>dApplicantIds.has(c.id)):interviewees;
+  const total=dApplicants.length;
+
+  if(total===0){
+    document.getElementById('main').innerHTML=`<div class="pg"><div class="ph"><div><h2>応募属性ダッシュボード</h2><p>${dSelY}年${dSelM}月のデータ</p></div>
+      <button class="btn btn-outline" onclick="exportDashboardCSV()"><i class="ti ti-download" aria-hidden="true"></i>エクスポート</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="atab-wrap" style="margin:0">
+        <button class="atab ${dScope==='all'?'on':''}" onclick="window._dashScope='all';renderDashboard()">全期間</button>
+        <button class="atab ${dScope==='period'?'on':''}" onclick="window._dashScope='period';renderDashboard()">期間指定</button>
+      </div>
+      ${dScope==='period'?`<select class="ss" style="font-size:12px;padding:5px 10px" onchange="window._dashY=parseInt(this.value);renderDashboard()">${yearOpts}</select><select class="ss" style="font-size:12px;padding:5px 10px" onchange="window._dashM=parseInt(this.value);renderDashboard()">${monthOpts}</select>`:''}
+    </div>
+    <div class="tw"><div style="text-align:center;padding:40px;color:var(--tx1);font-size:12px">この期間の応募者データがありません</div></div></div>`;
+    return;
+  }
+
   // 書類合格率
-  const passCount=applicants.filter(c=>c.phases['書類合格']).length;
-  const failCount=applicants.filter(c=>c.phases['書類不合格']).length;
+  const passCount=dApplicants.filter(c=>c.phases['書類合格']).length;
+  const failCount=dApplicants.filter(c=>c.phases['書類不合格']).length;
   const passRate=total?Math.round(passCount/total*100):0;
 
   // エリア別集計
   const areaMap={};
-  applicants.forEach(c=>{const a=(c.area||'不明').split(' ')[0]||'不明';areaMap[a]=(areaMap[a]||0)+1;});
+  dApplicants.forEach(c=>{const a=(c.area||'不明').split(' ')[0]||'不明';areaMap[a]=(areaMap[a]||0)+1;});
   const areaSorted=Object.entries(areaMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const areaMax=Math.max(...areaSorted.map(([,v])=>v),1);
 
   // 職種別集計
   const shokuMap={};
-  applicants.forEach(c=>{const s=c.shoku&&c.shoku!=='（未設定）'?c.shoku:'未設定';shokuMap[s]=(shokuMap[s]||0)+1;});
+  dApplicants.forEach(c=>{const s=c.shoku&&c.shoku!=='（未設定）'?c.shoku:'未設定';shokuMap[s]=(shokuMap[s]||0)+1;});
   const shokuSorted=Object.entries(shokuMap).sort((a,b)=>b[1]-a[1]);
   const shokuMax2=Math.max(...shokuSorted.map(([,v])=>v),1);
 
-  // 月別応募推移（直近6ヶ月）
-  const now=new Date();
+  // 月別応募推移（直近6ヶ月。期間指定中は指定月を最終月として遡る）
+  const baseDate=dScope==='period'?new Date(dSelY,dSelM-1,1):now;
   const recentMonths=Array.from({length:6},(_,i)=>{
-    const d=new Date(now.getFullYear(),now.getMonth()-5+i,1);
+    const d=new Date(baseDate.getFullYear(),baseDate.getMonth()-5+i,1);
     const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const cnt=applicants.filter(c=>(c.appliedAt||'').startsWith(k)).length;
     return {label:`${d.getMonth()+1}月`,cnt,k};
@@ -2693,19 +2820,19 @@ function renderDashboard(){
 
   // 媒体別集計（応募経路）
   const routeMap={};
-  applicants.forEach(c=>{const r=c.route||'不明';routeMap[r]=(routeMap[r]||0)+1;});
+  dApplicants.forEach(c=>{const r=c.route||'不明';routeMap[r]=(routeMap[r]||0)+1;});
   const routeSorted=Object.entries(routeMap).sort((a,b)=>b[1]-a[1]);
   const routeMax=Math.max(...routeSorted.map(([,v])=>v),1);
   const routeColors=['#2563eb','#0891b2','#7c3aed','#d97706','#16a34a','#dc2626','#64748b'];
 
   // 採用見込み別
   const prospecMap={};
-  applicants.forEach(c=>{const p=c.prospect||'不明';prospecMap[p]=(prospecMap[p]||0)+1;});
+  dApplicants.forEach(c=>{const p=c.prospect||'不明';prospecMap[p]=(prospecMap[p]||0)+1;});
   const prospecSorted=Object.entries(prospecMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
   // 年齢分布
   const ageGroups={'10代':0,'20代':0,'30代':0,'40代':0,'50代以上':0,'不明':0};
-  applicants.forEach(c=>{
+  dApplicants.forEach(c=>{
     const a=calcAge(c.birthDate);
     if(a===null){ageGroups['不明']++;}
     else if(a<20){ageGroups['10代']++;}
@@ -2720,7 +2847,23 @@ function renderDashboard(){
   document.getElementById('main').innerHTML=`<div class="pg">
     <div class="ph">
       <div><h2>応募属性ダッシュボード</h2><p>応募者の属性分析 — ${total}名のデータ</p></div>
-      <button class="btn btn-outline" onclick="printDashboard()"><i class="ti ti-printer" aria-hidden="true"></i>印刷／PDF</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="exportDashboardCSV()"><i class="ti ti-download" aria-hidden="true"></i>エクスポート</button>
+        <button class="btn btn-outline" onclick="printDashboard()"><i class="ti ti-printer" aria-hidden="true"></i>印刷／PDF</button>
+      </div>
+    </div>
+
+    <!-- 期間フィルタ -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="atab-wrap" style="margin:0">
+        <button class="atab ${dScope==='all'?'on':''}" onclick="window._dashScope='all';renderDashboard()">全期間</button>
+        <button class="atab ${dScope==='period'?'on':''}" onclick="window._dashScope='period';renderDashboard()">期間指定</button>
+      </div>
+      ${dScope==='period'?`
+      <select class="ss" style="font-size:12px;padding:5px 10px" onchange="window._dashY=parseInt(this.value);renderDashboard()">${yearOpts}</select>
+      <select class="ss" style="font-size:12px;padding:5px 10px" onchange="window._dashM=parseInt(this.value);renderDashboard()">${monthOpts}</select>
+      <span style="font-size:12px;font-weight:500;color:var(--tx0)">${dSelY}年${dSelM}月度（応募日ベース）</span>
+      `:'<span style="font-size:12px;font-weight:500;color:var(--tx0)">全期間のデータ</span>'}
     </div>
 
     <!-- KPI -->
@@ -2728,7 +2871,7 @@ function renderDashboard(){
       <div class="dc" style="border-top:3px solid #2563eb"><div class="dc-l">総応募数</div><div class="dc-v" style="color:#2563eb">${total}</div></div>
       <div class="dc" style="border-top:3px solid #16a34a"><div class="dc-l">書類合格</div><div class="dc-v" style="color:#16a34a">${passCount}<span style="font-size:12px"> (${passRate}%)</span></div></div>
       <div class="dc" style="border-top:3px solid #dc2626"><div class="dc-l">書類不合格</div><div class="dc-v" style="color:#dc2626">${failCount}</div></div>
-      <div class="dc" style="border-top:3px solid #d97706"><div class="dc-l">面接管理中</div><div class="dc-v" style="color:#d97706">${interviewees.length}</div></div>
+      <div class="dc" style="border-top:3px solid #d97706"><div class="dc-l">面接管理中</div><div class="dc-v" style="color:#d97706">${dInterviewees.length}</div></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
@@ -2805,6 +2948,45 @@ function renderDashboard(){
   </div>`;
 }
 function printDashboard(){window.print();}
+
+// ★ 応募属性ダッシュボード：現在の期間フィルタ設定に応じてCSVエクスポート
+function exportDashboardCSV(){
+  const now=new Date();
+  const dSelY=window._dashY||now.getFullYear();
+  const dSelM=window._dashM||(now.getMonth()+1);
+  const dScope=window._dashScope==='period'?'period':'all';
+  const dKeyStr=getBudgetKey(dSelY,dSelM);
+  const scopeLabel=dScope==='period'?`${dSelY}年${dSelM}月`:'全期間';
+  const dApplicants=dScope==='period'?applicants.filter(c=>(c.appliedAt||'').startsWith(dKeyStr)):applicants;
+
+  if(!dApplicants.length){showToast('この期間のデータがありません');return;}
+
+  const areaMap={},shokuMap={},routeMap={},prospecMap={};
+  const ageGroups={'10代':0,'20代':0,'30代':0,'40代':0,'50代以上':0,'不明':0};
+  dApplicants.forEach(c=>{
+    const a=(c.area||'不明').split(' ')[0]||'不明';areaMap[a]=(areaMap[a]||0)+1;
+    const s=c.shoku&&c.shoku!=='（未設定）'?c.shoku:'未設定';shokuMap[s]=(shokuMap[s]||0)+1;
+    const r=c.route||'不明';routeMap[r]=(routeMap[r]||0)+1;
+    const p=c.prospect||'不明';prospecMap[p]=(prospecMap[p]||0)+1;
+    const age=calcAge(c.birthDate);
+    if(age===null)ageGroups['不明']++;
+    else if(age<20)ageGroups['10代']++;
+    else if(age<30)ageGroups['20代']++;
+    else if(age<40)ageGroups['30代']++;
+    else if(age<50)ageGroups['40代']++;
+    else ageGroups['50代以上']++;
+  });
+
+  const headers=['分類','項目','件数','対象期間'];
+  const rows=[
+    ...Object.entries(areaMap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>['応募エリア',k,v,scopeLabel]),
+    ...Object.entries(shokuMap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>['職種区分',k,v,scopeLabel]),
+    ...Object.entries(routeMap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>['応募経路',k,v,scopeLabel]),
+    ...Object.entries(prospecMap).sort((a,b)=>b[1]-a[1]).map(([k,v])=>['採用見込',k,v,scopeLabel]),
+    ...Object.entries(ageGroups).map(([k,v])=>['年齢層',k,v,scopeLabel]),
+  ];
+  downloadCSV(headers,rows,`応募属性_${scopeLabel}`);
+}
 
 // ===== RENDER: 紹介会社分析 =====
 function renderAgencyReport(){
@@ -2976,22 +3158,37 @@ function renderFunnel(){
   const pct=(n,d)=>d>0?Math.round(n/d*100):0;
   const pct1=(n,d)=>d>0?Math.round(n/d*1000)/10:0;
 
-  const total=applicants.length;
-  const docPass=applicants.filter(c=>c.phases['書類合格']).length;
-  const docFail=applicants.filter(c=>c.phases['書類不合格']).length;
-  const i1Set=interviewees.filter(c=>c.phases['一次面接設定']||c.phases['一次設定後辞退']||c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格']).length;
-  const i1Withdraw=interviewees.filter(c=>c.phases['一次設定後辞退']).length;
-  const i1Exec=interviewees.filter(c=>c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格']).length;
-  const i1Pass=interviewees.filter(c=>c.phases['一次面接合格']).length;
-  const i1Fail=interviewees.filter(c=>c.phases['一次面接不合格']).length;
-  const i1AfterWithdraw=interviewees.filter(c=>c.phases['一次面接実施']&&!c.phases['一次面接合格']&&!c.phases['一次面接不合格']).length;
-  const finalSet=interviewees.filter(c=>c.phases['最終面接設定']||c.phases['最終設定後辞退']||c.phases['最終面接実施']||c.phases['内定']||c.phases['最終面接不合格']).length;
-  const finalWithdraw=interviewees.filter(c=>c.phases['最終設定後辞退']).length;
-  const finalExec=interviewees.filter(c=>c.phases['最終面接実施']||c.phases['内定']||c.phases['最終面接不合格']).length;
-  const finalAfterWithdraw=interviewees.filter(c=>c.phases['最終面接実施']&&!c.phases['内定']&&!c.phases['最終面接不合格']&&!c.phases['不採用']).length;
-  const offer=interviewees.filter(c=>c.phases['内定']).length;
-  const offerWithdraw=interviewees.filter(c=>c.phases['内定後辞退']).length;
-  const hired=interviewees.filter(c=>c.phases['入社']).length;
+  // ★ 期間フィルタ（全期間／指定の年月）
+  const now=new Date();
+  const fSelY=window._funnelY||now.getFullYear();
+  const fSelM=window._funnelM||(now.getMonth()+1);
+  const fScope=window._funnelScope==='period'?'period':'all';
+  const fKeyStr=getBudgetKey(fSelY,fSelM);
+  const years=[2024,2025,2026,2027];
+  const monthNames=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const yearOpts=years.map(y=>`<option value="${y}" ${y===fSelY?'selected':''}>${y}年</option>`).join('');
+  const monthOpts=monthNames.map((m,i)=>`<option value="${i+1}" ${(i+1)===fSelM?'selected':''}>${m}</option>`).join('');
+
+  const fApplicants=fScope==='period'?applicants.filter(c=>(c.appliedAt||'').startsWith(fKeyStr)):applicants;
+  const fApplicantIds=new Set(fApplicants.map(c=>c.id));
+  const fInterviewees=fScope==='period'?interviewees.filter(c=>fApplicantIds.has(c.id)):interviewees;
+
+  const total=fApplicants.length;
+  const docPass=fApplicants.filter(c=>c.phases['書類合格']).length;
+  const docFail=fApplicants.filter(c=>c.phases['書類不合格']).length;
+  const i1Set=fInterviewees.filter(c=>c.phases['一次面接設定']||c.phases['一次設定後辞退']||c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格']).length;
+  const i1Withdraw=fInterviewees.filter(c=>c.phases['一次設定後辞退']).length;
+  const i1Exec=fInterviewees.filter(c=>c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格']).length;
+  const i1Pass=fInterviewees.filter(c=>c.phases['一次面接合格']).length;
+  const i1Fail=fInterviewees.filter(c=>c.phases['一次面接不合格']).length;
+  const i1AfterWithdraw=fInterviewees.filter(c=>c.phases['一次面接実施']&&!c.phases['一次面接合格']&&!c.phases['一次面接不合格']).length;
+  const finalSet=fInterviewees.filter(c=>c.phases['最終面接設定']||c.phases['最終設定後辞退']||c.phases['最終面接実施']||c.phases['内定']||c.phases['最終面接不合格']).length;
+  const finalWithdraw=fInterviewees.filter(c=>c.phases['最終設定後辞退']).length;
+  const finalExec=fInterviewees.filter(c=>c.phases['最終面接実施']||c.phases['内定']||c.phases['最終面接不合格']).length;
+  const finalAfterWithdraw=fInterviewees.filter(c=>c.phases['最終面接実施']&&!c.phases['内定']&&!c.phases['最終面接不合格']&&!c.phases['不採用']).length;
+  const offer=fInterviewees.filter(c=>c.phases['内定']).length;
+  const offerWithdraw=fInterviewees.filter(c=>c.phases['内定後辞退']).length;
+  const hired=fInterviewees.filter(c=>c.phases['入社']).length;
   const shodalCnt=offer-offerWithdraw;
   const shodaWithdrawCnt=offerWithdraw;
 
@@ -3070,9 +3267,9 @@ function renderFunnel(){
     +row(true,'承諾後辞退率',shodaWithdrawCnt,shodalCnt,rShodaWithdraw,'#94a3b8','#94a3b8');
 
   // 職種別サマリー
-  var shokuRows=shokuMaster.filter(function(s){return applicants.some(function(c){return c.shoku===s;});}).map(function(s){
-    var sa=applicants.filter(function(c){return c.shoku===s;});
-    var si=interviewees.filter(function(c){return c.shoku===s;});
+  var shokuRows=shokuMaster.filter(function(s){return fApplicants.some(function(c){return c.shoku===s;});}).map(function(s){
+    var sa=fApplicants.filter(function(c){return c.shoku===s;});
+    var si=fInterviewees.filter(function(c){return c.shoku===s;});
     var sp=sa.filter(function(c){return c.phases['書類合格'];}).length;
     var si1=si.filter(function(c){return c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格'];}).length;
     var so=si.filter(function(c){return c.phases['内定'];}).length;
@@ -3104,7 +3301,20 @@ function renderFunnel(){
 
   document.getElementById('main').innerHTML=
     '<div class="pg">'
-    +'<div class="ph"><div><h2>遷移率分析</h2><p>各フェーズの詳細な人数と遷移率（分母付き）</p></div></div>'
+    +'<div class="ph"><div><h2>遷移率分析</h2><p>各フェーズの詳細な人数と遷移率（分母付き）</p></div>'
+    +'<button class="btn btn-outline" onclick="exportFunnelCSV()"><i class="ti ti-download" aria-hidden="true"></i>エクスポート</button>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<div class="atab-wrap" style="margin:0">'
+    +'<button class="atab '+(fScope==='all'?'on':'')+'" onclick="window._funnelScope=\'all\';renderFunnel()">全期間</button>'
+    +'<button class="atab '+(fScope==='period'?'on':'')+'" onclick="window._funnelScope=\'period\';renderFunnel()">期間指定</button>'
+    +'</div>'
+    +(fScope==='period'?(
+      '<select id="funnel-year" class="ss" style="font-size:12px;padding:5px 10px" onchange="window._funnelY=parseInt(this.value);renderFunnel()">'+yearOpts+'</select>'
+      +'<select id="funnel-month" class="ss" style="font-size:12px;padding:5px 10px" onchange="window._funnelM=parseInt(this.value);renderFunnel()">'+monthOpts+'</select>'
+      +'<span style="font-size:12px;font-weight:500;color:var(--tx0)">'+fSelY+'年'+fSelM+'月度（応募日ベース）</span>'
+    ):'<span style="font-size:12px;font-weight:500;color:var(--tx0)">全期間のデータ</span>')
+    +'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:14px">'+kpiHtml+'</div>'
     +'<div class="tw" style="margin-bottom:14px"><table style="width:100%;border-collapse:collapse;font-size:11px">'
     +'<thead><tr style="background:var(--bg1)">'
@@ -3116,6 +3326,64 @@ function renderFunnel(){
     +'<tbody>'+tableRows+'</tbody></table></div>'
     +'<div class="sc"><div class="sc-t">職種別 遷移率</div>'+shokuSection+'</div>'
     +'</div>';
+}
+
+// ★ 遷移率分析：現在の期間フィルタ設定に応じてCSVエクスポート
+function exportFunnelCSV(){
+  const now=new Date();
+  const fSelY=window._funnelY||now.getFullYear();
+  const fSelM=window._funnelM||(now.getMonth()+1);
+  const fScope=window._funnelScope==='period'?'period':'all';
+  const fKeyStr=getBudgetKey(fSelY,fSelM);
+  const scopeLabel=fScope==='period'?`${fSelY}年${fSelM}月`:'全期間';
+
+  const fApplicants=fScope==='period'?applicants.filter(c=>(c.appliedAt||'').startsWith(fKeyStr)):applicants;
+  const fApplicantIds=new Set(fApplicants.map(c=>c.id));
+  const fInterviewees=fScope==='period'?interviewees.filter(c=>fApplicantIds.has(c.id)):interviewees;
+
+  const pct1=(n,d)=>d>0?Math.round(n/d*1000)/10:0;
+  const total=fApplicants.length;
+  const docPass=fApplicants.filter(c=>c.phases['書類合格']).length;
+  const docFail=fApplicants.filter(c=>c.phases['書類不合格']).length;
+  const i1Set=fInterviewees.filter(c=>c.phases['一次面接設定']||c.phases['一次設定後辞退']||c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格']).length;
+  const i1Exec=fInterviewees.filter(c=>c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格']).length;
+  const i1Pass=fInterviewees.filter(c=>c.phases['一次面接合格']).length;
+  const i1Fail=fInterviewees.filter(c=>c.phases['一次面接不合格']).length;
+  const finalSet=fInterviewees.filter(c=>c.phases['最終面接設定']||c.phases['最終設定後辞退']||c.phases['最終面接実施']||c.phases['内定']||c.phases['最終面接不合格']).length;
+  const finalExec=fInterviewees.filter(c=>c.phases['最終面接実施']||c.phases['内定']||c.phases['最終面接不合格']).length;
+  const offer=fInterviewees.filter(c=>c.phases['内定']).length;
+  const hired=fInterviewees.filter(c=>c.phases['入社']).length;
+
+  const headers=['フェーズ','人数','分母','率(%)','対象期間'];
+  const rows=[
+    ['応募',total,total,100,scopeLabel],
+    ['書類合格',docPass,total,pct1(docPass,total),scopeLabel],
+    ['書類不合格',docFail,total,pct1(docFail,total),scopeLabel],
+    ['一次面接設定',i1Set,docPass,pct1(i1Set,docPass),scopeLabel],
+    ['一次面接実施',i1Exec,i1Set,pct1(i1Exec,i1Set),scopeLabel],
+    ['一次面接合格',i1Pass,i1Exec,pct1(i1Pass,i1Exec),scopeLabel],
+    ['一次面接不合格',i1Fail,i1Exec,pct1(i1Fail,i1Exec),scopeLabel],
+    ['最終面接設定',finalSet,i1Pass,pct1(finalSet,i1Pass),scopeLabel],
+    ['最終面接実施',finalExec,finalSet,pct1(finalExec,finalSet),scopeLabel],
+    ['内定',offer,finalExec,pct1(offer,finalExec),scopeLabel],
+    ['入社',hired,offer,pct1(hired,offer),scopeLabel],
+  ];
+
+  // 職種別データも合わせて出力
+  const shokuHeaders=['職種','種別','応募','書類合格','一次実施','内定','入社'];
+  const shokuRows=shokuMaster.filter(s=>fApplicants.some(c=>c.shoku===s)).map(s=>{
+    const sa=fApplicants.filter(c=>c.shoku===s);
+    const si=fInterviewees.filter(c=>c.shoku===s);
+    const sp=sa.filter(c=>c.phases['書類合格']).length;
+    const si1=si.filter(c=>c.phases['一次面接実施']||c.phases['一次面接合格']||c.phases['一次面接不合格']).length;
+    const so=si.filter(c=>c.phases['内定']).length;
+    const sh=si.filter(c=>c.phases['入社']).length;
+    return [s,isJimu(s)?'バックオフィス':'現場',sa.length,sp,si1,so,sh];
+  });
+
+  downloadCSV(headers,rows,`遷移率分析_${scopeLabel}`);
+  // 職種別は別ファイルとして出力
+  if(shokuRows.length) downloadCSV(shokuHeaders,shokuRows,`遷移率分析_職種別_${scopeLabel}`);
 }
 
 
