@@ -403,6 +403,7 @@ tbody tr:hover td{background:var(--bg1)}
     <div class="mh"><h3 id="dec-name"></h3><button class="xb" onclick="closeDecisionModal()">&times;</button></div>
     <div class="mb">
       <div class="note-box">⚠ 「調整給」以外は必須項目です（未入力では保存できません）</div>
+      <div class="fr"><label>応募経路</label><select id="dec-route"></select></div>
       <div class="fr"><label>配属先責任者 *</label><select id="dec-dept"></select></div>
       <div class="fr3">
         <div class="fr" style="margin:0"><label>基本給（円）*</label><input id="dec-kihon" type="number" min="0" placeholder="250000"></div>
@@ -440,6 +441,7 @@ tbody tr:hover td{background:var(--bg1)}
         <div class="fr" style="margin:0"><label>電話番号</label><input id="mdec-phone" placeholder="任意"></div>
         <div class="fr" style="margin:0"><label>職種区分</label><select id="mdec-shoku"></select></div>
       </div>
+      <div class="fr" style="margin-bottom:0"><label>応募経路</label><select id="mdec-route"></select></div>
     </div>
     <div class="mf">
       <button class="cbtn" onclick="closeManualDecisionModal()">閉じる</button>
@@ -1426,6 +1428,7 @@ function renderDecision(){
     return '<tr'+(hired?' style="background:#fef9c3"':'')+'>'
       +'<td style="font-weight:500">'+c.name+(c.manualDecision?' <span class="bdg" style="font-size:9px;background:#f5f3ff;color:#6d28d9;border-color:#c4b5fd">手動追加</span>':'')+'</td>'
       +'<td>'+(c.shoku&&c.shoku!=='（未設定）'?c.shoku:'−')+'</td>'
+      +'<td>'+(c.route||'−')+'</td>'
       +'<td>'+(d.dept||'−')+'</td>'
       +'<td>'+(d.kihon!==undefined&&d.kihon!==''?'¥'+Number(d.kihon).toLocaleString():'−')+'</td>'
       +'<td>'+(d.kotei!==undefined&&d.kotei!==''?'¥'+Number(d.kotei).toLocaleString():'−')+'</td>'
@@ -1453,7 +1456,7 @@ function renderDecision(){
     +'</div>'
     +(decided.length
       ?'<div class="tw"><table><thead><tr>'
-        +'<th>氏名</th><th>職種区分</th><th>配属先責任者</th><th>基本給</th><th>固定残業代</th><th>調整給</th><th>入社日</th><th>入社手続き場所</th><th>ステータス</th><th style="text-align:right">操作</th>'
+        +'<th>氏名</th><th>職種区分</th><th>応募経路</th><th>配属先責任者</th><th>基本給</th><th>固定残業代</th><th>調整給</th><th>入社日</th><th>入社手続き場所</th><th>ステータス</th><th style="text-align:right">操作</th>'
         +'</tr></thead><tbody>'+rows+'</tbody></table></div>'
       :'<p style="font-size:12px;color:var(--tx1)">内定者がいません。面接管理で「内定」を記録すると、ここに自動で表示されます。</p>')
     +'</div>';
@@ -1465,6 +1468,7 @@ function openDecisionModal(id){
   currentDecisionId=id;
   const d=c.decision||{};
   document.getElementById('dec-name').textContent=c.name+' さんの決定情報';
+  document.getElementById('dec-route').innerHTML=routeOpts(c.route||'その他');
   document.getElementById('dec-dept').innerHTML=tantoOpts(d.dept||'（未設定）');
   document.getElementById('dec-kihon').value=(d.kihon!==undefined&&d.kihon!=='')?d.kihon:'';
   document.getElementById('dec-kotei').value=(d.kotei!==undefined&&d.kotei!=='')?d.kotei:'';
@@ -1479,6 +1483,7 @@ function closeDecisionModal(){document.getElementById('decision-modal').style.di
 
 function saveDecisionData(){
   const c=interviewees.find(x=>x.id===currentDecisionId);if(!c)return;
+  const route=document.getElementById('dec-route').value;
   const dept=document.getElementById('dec-dept').value.trim();
   const deptVal=(dept==='（未設定）')?'':dept;
   const kihon=document.getElementById('dec-kihon').value;
@@ -1497,6 +1502,7 @@ function saveDecisionData(){
   mark('dec-location',!!location&&location!=='（未設定）');
   if(!ok){showToast('必須項目を入力してください（調整給以外は必須）');return;}
 
+  c.route=route;
   c.decision={dept:deptVal,kihon:Number(kihon),kotei:Number(kotei),chosei:chosei===''?'':Number(chosei),location,memo};
   c.joinDate=joinDate;
   closeDecisionModal();
@@ -1516,6 +1522,7 @@ function openManualDecisionModal(){
   document.getElementById('mdec-name').value='';
   document.getElementById('mdec-phone').value='';
   document.getElementById('mdec-shoku').innerHTML=shokuOpts('（未設定）');
+  document.getElementById('mdec-route').innerHTML=routeOpts('リファラル');
   document.getElementById('mdec-name').style.borderColor='';
   document.getElementById('manual-decision-modal').style.display='flex';
 }
@@ -1525,6 +1532,7 @@ function saveManualDecision(){
   const name=document.getElementById('mdec-name').value.trim();
   const phone=document.getElementById('mdec-phone').value.trim();
   const shoku=document.getElementById('mdec-shoku').value;
+  const route=document.getElementById('mdec-route').value;
   if(!name){
     document.getElementById('mdec-name').style.borderColor='#dc2626';
     showToast('氏名を入力してください');
@@ -1534,7 +1542,7 @@ function saveManualDecision(){
   const c={
     id:newId,name,phone:phone||'',email:'',birthDate:'',
     job:'',area:'',shoku:shoku==='（未設定）'?'':shoku,
-    address:'',experience:'',education:'',route:'その他',prospect:'',
+    address:'',experience:'',education:'',route:route||'その他',prospect:'',
     appliedAt:todayStr(),tanto:'',memo:'手動で決定者として追加',
     phases:{'内定':{date:todayStr()}},
     history:[{phase:'内定',date:todayStr(),note:'手動追加（決定者管理より直接登録）',auto:false}],
