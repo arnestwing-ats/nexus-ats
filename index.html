@@ -1410,9 +1410,9 @@ function decisionMissing(c){
 }
 function renderDecision(){
   const decided=interviewees.filter(c=>c.phases&&c.phases['内定']);
-  // ★ 応募経路が未設定の候補者はIndeed経由として自動補完（既存データも含めて反映・保存）
+  // ★ 応募経路が未設定、または「スポンサー求人リンク」表記の候補者はIndeed経由として自動補完（既存データも含めて反映・保存）
   let backfilled=false;
-  decided.forEach(c=>{ if(!c.route){ c.route='Indeed'; backfilled=true; } });
+  decided.forEach(c=>{ if(!c.route||c.route==='スポンサー求人リンク'){ c.route='Indeed'; backfilled=true; } });
   if(backfilled) saveToStorage();
   // 入社日が遅い順（未入力は末尾）に並び替え
   decided.sort((a,b)=>{
