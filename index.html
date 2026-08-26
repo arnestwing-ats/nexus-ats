@@ -264,7 +264,9 @@ tbody tr:hover td{background:var(--bg1)}
             <select class="ef" id="dm-shoku-edit" onchange="saveField('shoku',this.value)" style="font-size:11px;padding:2px 4px;border:1px solid #fbbf24"></select>
           </div>
           <div class="det-row"><span class="det-key">応募日</span><span id="dm-date"></span></div>
-          <div class="det-row"><span class="det-key">経路</span><span id="dm-route"></span></div>
+          <div class="det-row"><span class="det-key">応募経路</span>
+            <select class="ef" id="dm-route-edit" onchange="saveField('route',this.value)" style="font-size:11px;padding:2px 4px"></select>
+          </div>
           <div class="det-row"><span class="det-key">現場担当者</span>
             <select class="ef" id="dm-tanto-edit" onchange="saveField('tanto',this.value)" style="font-size:11px;padding:2px 4px"></select>
           </div>
@@ -423,6 +425,25 @@ tbody tr:hover td{background:var(--bg1)}
     <div class="mf">
       <button class="cbtn" onclick="closeDecisionModal()">閉じる</button>
       <button class="btn btn-blue" onclick="saveDecisionData()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 手動で決定者を追加するモーダル -->
+<div id="manual-decision-modal" class="ov" style="display:none">
+  <div class="mo mo-sm">
+    <div class="mh"><h3>決定者を手動で追加</h3><button class="xb" onclick="closeManualDecisionModal()">&times;</button></div>
+    <div class="mb">
+      <div class="note-box">⚠ 選考フローを経由していない候補者（リファラル入社確定者など）をここから直接「決定者」として登録できます</div>
+      <div class="fr"><label>氏名 *</label><input id="mdec-name" placeholder="例：山田 太郎"></div>
+      <div class="fr2">
+        <div class="fr" style="margin:0"><label>電話番号</label><input id="mdec-phone" placeholder="任意"></div>
+        <div class="fr" style="margin:0"><label>職種区分</label><select id="mdec-shoku"></select></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="cbtn" onclick="closeManualDecisionModal()">閉じる</button>
+      <button class="btn btn-blue" onclick="saveManualDecision()">追加して詳細を入力</button>
     </div>
   </div>
 </div>
@@ -656,7 +677,7 @@ async function saveToStorage(keys){
 }
 
 function buildSaveData(){
-  return {applicants,interviewees,agencies,shokuMaster,shokuTypeMap,agentMaster,tantoMaster,monthlyBudgets,users,idC,agIdC,uIdC};
+  return {applicants,interviewees,agencies,shokuMaster,shokuTypeMap,agentMaster,tantoMaster,routeMaster,monthlyBudgets,users,idC,agIdC,uIdC};
 }
 
 // スプレッドシートから読み込み
@@ -673,6 +694,7 @@ async function loadFromStorage(){
       if(data.shokuTypeMap && typeof data.shokuTypeMap==='object') shokuTypeMap=data.shokuTypeMap;
       if(Array.isArray(data.agentMaster)) agentMaster=data.agentMaster;
       if(Array.isArray(data.tantoMaster)) tantoMaster=data.tantoMaster;
+      if(Array.isArray(data.routeMaster)&&data.routeMaster.length>0) routeMaster=data.routeMaster;
       if(data.monthlyBudgets && typeof data.monthlyBudgets==='object') monthlyBudgets=data.monthlyBudgets;
       if(Array.isArray(data.users)&&data.users.length>0) users=data.users;
       if(data.idC) idC=data.idC;
@@ -697,6 +719,7 @@ async function loadFromStorage(){
     if(data.shokuTypeMap) shokuTypeMap=data.shokuTypeMap;
     if(data.agentMaster) agentMaster=data.agentMaster;
     if(data.tantoMaster) tantoMaster=data.tantoMaster;
+    if(data.routeMaster&&data.routeMaster.length>0) routeMaster=data.routeMaster;
     if(data.monthlyBudgets) monthlyBudgets=data.monthlyBudgets;
     if(data.users) users=data.users;
     if(data.uIdC) uIdC=data.uIdC;
@@ -763,6 +786,8 @@ let shokuMaster=['上棟','足場','ドライバー','内装','住設事務','�
 let shokuTypeMap={'住設事務':'jimu','受発注事務':'jimu','DX事務':'jimu','一般事務':'jimu'};
 // 現場採用担当者マスター
 let tantoMaster=[];
+// 応募経路マスター（Indeedは自動反映のデフォルト、他はマスター画面で追加・変更可能）
+let routeMaster=['Indeed','リファラル','HP応募','その他'];
 // マスター画面のタブ状態（職種／担当者）
 let masterTab='shoku';
 // エージェント会社マスター（社名・料率・返金規定）
@@ -925,6 +950,7 @@ function bdg(s){
   return `<span class="bdg ${cls}">${s}</span>`;
 }
 function shokuOpts(sel=''){return ['（未設定）',...shokuMaster].map(s=>`<option value="${s}"${sel===s?' selected':''}>${s}</option>`).join('');}
+function routeOpts(sel=''){return routeMaster.map(r=>`<option value="${r}"${sel===r?' selected':''}>${r}</option>`).join('');}
 function statusOpts(sel=''){return FULL_STATUS.map(s=>`<option value="${s}"${sel===s?' selected':''}>${s}</option>`).join('');}
 function updateBadges(){
   // 応募者管理：未選考（書類選考済みでない人）のカウント → 赤バッジ
@@ -1160,7 +1186,7 @@ function openDM(id){
   document.getElementById('dm-area-edit').value=c.area||'';
   document.getElementById('dm-shoku-edit').innerHTML=shokuOpts(c.shoku||'（未設定）');
   document.getElementById('dm-date').textContent=c.appliedAt||'−';
-  document.getElementById('dm-route').textContent=c.route||'−';
+  document.getElementById('dm-route-edit').innerHTML=routeOpts(c.route||'Indeed');
   document.getElementById('dm-tanto-edit').innerHTML=tantoOpts(c.tanto||'（未設定）');
   document.getElementById('dm-memo').value=c.memo||'';
   // 添付ファイル表示
@@ -1398,7 +1424,7 @@ function renderDecision(){
       ?'<span class="bdg" style="background:#fef08a;color:#713f12;border-color:#fde047">入社済み</span>'
       :(missing?'<span class="bdg by">未入力あり</span>':'<span class="bdg bb">入社待ち</span>');
     return '<tr'+(hired?' style="background:#fef9c3"':'')+'>'
-      +'<td style="font-weight:500">'+c.name+'</td>'
+      +'<td style="font-weight:500">'+c.name+(c.manualDecision?' <span class="bdg" style="font-size:9px;background:#f5f3ff;color:#6d28d9;border-color:#c4b5fd">手動追加</span>':'')+'</td>'
       +'<td>'+(c.shoku&&c.shoku!=='（未設定）'?c.shoku:'−')+'</td>'
       +'<td>'+(d.dept||'−')+'</td>'
       +'<td>'+(d.kihon!==undefined&&d.kihon!==''?'¥'+Number(d.kihon).toLocaleString():'−')+'</td>'
@@ -1412,12 +1438,15 @@ function renderDecision(){
         +(hired
           ?'<button class="btn-sm-red" onclick="toggleHiredStatus('+c.id+')">入社取消</button>'
           :'<button class="btn btn-green" style="font-size:10px;padding:3px 9px" onclick="toggleHiredStatus('+c.id+')">入社済みにする</button>')
+        +(c.manualDecision?' <button class="btn-sm-red" onclick="deleteManualDecision('+c.id+')" title="手動追加した決定者を削除"><i class="ti ti-trash" aria-hidden="true"></i></button>':'')
       +'</td></tr>';
   }).join('');
 
   document.getElementById('main').innerHTML=
     '<div class="pg">'
-    +'<div class="ph"><div><h2>決定者管理</h2><p>内定を記録した候補者を自動表示し、配属・給与・入社情報を管理します</p></div></div>'
+    +'<div class="ph"><div><h2>決定者管理</h2><p>内定を記録した候補者を自動表示し、配属・給与・入社情報を管理します</p></div>'
+    +'<button class="btn btn-blue" onclick="openManualDecisionModal()"><i class="ti ti-plus" aria-hidden="true"></i>手動で決定者を追加</button>'
+    +'</div>'
     +'<div class="dash-grid-2">'
       +'<div class="dc"><div class="dc-l">内定者数</div><div class="dc-v" style="color:#7c3aed">'+decided.length+'</div></div>'
       +'<div class="dc"><div class="dc-l">入社済み</div><div class="dc-v" style="color:#a16207">'+hiredCnt+'</div></div>'
@@ -1480,6 +1509,54 @@ function saveDecisionData(){
 function toggleHiredStatus(id){
   recordPhase(id,'int','入社');
   renderDecision();
+}
+
+// ★ 決定者管理：手動追加（選考フローを経由しない決定者を直接登録）
+function openManualDecisionModal(){
+  document.getElementById('mdec-name').value='';
+  document.getElementById('mdec-phone').value='';
+  document.getElementById('mdec-shoku').innerHTML=shokuOpts('（未設定）');
+  document.getElementById('mdec-name').style.borderColor='';
+  document.getElementById('manual-decision-modal').style.display='flex';
+}
+function closeManualDecisionModal(){document.getElementById('manual-decision-modal').style.display='none';}
+
+function saveManualDecision(){
+  const name=document.getElementById('mdec-name').value.trim();
+  const phone=document.getElementById('mdec-phone').value.trim();
+  const shoku=document.getElementById('mdec-shoku').value;
+  if(!name){
+    document.getElementById('mdec-name').style.borderColor='#dc2626';
+    showToast('氏名を入力してください');
+    return;
+  }
+  const newId=idC++;
+  const c={
+    id:newId,name,phone:phone||'',email:'',birthDate:'',
+    job:'',area:'',shoku:shoku==='（未設定）'?'':shoku,
+    address:'',experience:'',education:'',route:'その他',prospect:'',
+    appliedAt:todayStr(),tanto:'',memo:'手動で決定者として追加',
+    phases:{'内定':{date:todayStr()}},
+    history:[{phase:'内定',date:todayStr(),note:'手動追加（決定者管理より直接登録）',auto:false}],
+    inInterview:true,intDate:'',joinDate:'',decision:{},
+    manualDecision:true
+  };
+  interviewees.push(c);
+  closeManualDecisionModal();
+  renderDecision();
+  saveToStorage();
+  showToast(`「${name}」を決定者として追加しました`);
+  openDecisionModal(newId);
+}
+
+function deleteManualDecision(id){
+  const c=interviewees.find(x=>x.id===id);
+  if(!c||!c.manualDecision) return;
+  if(!confirm(`「${c.name}」を決定者一覧から削除しますか？この操作は取り消せません。`)) return;
+  interviewees=interviewees.filter(x=>x.id!==id);
+  renderDecision();
+  saveToStorage();
+  showToast('削除しました');
 }
 
 // エージェント会社マスター
@@ -2654,13 +2731,16 @@ function renderAgency(){
 // ===== RENDER: マスター（職種・担当者） =====
 function renderMaster(){
   const isShoku=masterTab==='shoku';
+  const isTanto=masterTab==='tanto';
+  const isRoute=masterTab==='route';
   document.getElementById('main').innerHTML=`<div class="pg">
     <div class="ph">
-      <div><h2>マスター</h2><p>職種区分・現場採用担当者の登録管理</p></div>
+      <div><h2>マスター</h2><p>職種区分・現場採用担当者・応募経路の登録管理</p></div>
     </div>
     <div class="atab-wrap">
       <button class="atab ${isShoku?'on':''}" onclick="masterTab='shoku';renderMaster()">職種マスター</button>
-      <button class="atab ${!isShoku?'on':''}" onclick="masterTab='tanto';renderMaster()">担当者マスター</button>
+      <button class="atab ${isTanto?'on':''}" onclick="masterTab='tanto';renderMaster()">担当者マスター</button>
+      <button class="atab ${isRoute?'on':''}" onclick="masterTab='route';renderMaster()">応募経路マスター</button>
     </div>
     ${isShoku?`
     <div class="sc">
@@ -2686,7 +2766,7 @@ function renderMaster(){
         <button class="btn btn-blue" onclick="addShoku()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
       </div>
     </div>
-    `:`
+    `:isTanto?`
     <div class="sc">
       <div class="sc-t">現在の現場採用担当者一覧（↑↓で表示順を変更できます）</div>
       <div id="tanto-list" style="margin-bottom:12px">
@@ -2706,8 +2786,47 @@ function renderMaster(){
         <button class="btn btn-blue" onclick="addTanto()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
       </div>
     </div>
+    `:`
+    <div class="sc">
+      <div class="sc-t">現在の応募経路一覧（↑↓で表示順を変更できます）</div>
+      <p style="font-size:11px;color:var(--tx1);margin-bottom:8px">「Indeed」はCSVインポート時に応募経路が未指定の場合、自動的に設定されます。</p>
+      <div id="route-list" style="margin-bottom:12px">
+        ${routeMaster.length===0?'<p style="font-size:12px;color:var(--tx1)">登録なし</p>':routeMaster.map((r,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--bd2)">
+          <div style="display:flex;flex-direction:column;gap:1px">
+            <button style="background:#fff;border:0.5px solid var(--bd1);border-radius:3px;color:${i===0?'var(--tx2)':'#2563eb'};padding:0;width:18px;height:14px;font-size:9px;line-height:14px;text-align:center;cursor:${i===0?'default':'pointer'}" onclick="moveRoute(${i},-1)" ${i===0?'disabled':''}>▲</button>
+            <button style="background:#fff;border:0.5px solid var(--bd1);border-radius:3px;color:${i===routeMaster.length-1?'var(--tx2)':'#2563eb'};padding:0;width:18px;height:14px;font-size:9px;line-height:14px;text-align:center;cursor:${i===routeMaster.length-1?'default':'pointer'}" onclick="moveRoute(${i},1)" ${i===routeMaster.length-1?'disabled':''}>▼</button>
+          </div>
+          <span style="font-size:10px;color:var(--tx2);width:18px">${i+1}</span>
+          <span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500;background:#ecfeff;color:#0e7490;border:0.5px solid #a5f3fc">${r}</span>
+          <span style="flex:1;font-size:12px">${r}</span>
+          <button class="btn-sm-red" onclick="deleteRoute(${i})"><i class="ti ti-trash" aria-hidden="true"></i> 削除</button>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="route-new" type="text" placeholder="新しい応募経路名を入力（例：チラシ）" style="flex:1;border:0.5px solid var(--bd1);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;background:#fff" onkeydown="if(event.key==='Enter')addRoute()">
+        <button class="btn btn-blue" onclick="addRoute()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
+      </div>
+    </div>
     `}
   </div>`;
+}
+function addRoute(){
+  const val=document.getElementById('route-new').value.trim();
+  if(!val){showToast('応募経路名を入力してください');return;}
+  if(routeMaster.includes(val)){showToast('すでに存在します');return;}
+  routeMaster.push(val);
+  renderMaster();saveToStorage();showToast(`「${val}」を追加しました`);
+}
+function deleteRoute(i){
+  const name=routeMaster[i];
+  routeMaster.splice(i,1);
+  renderMaster();saveToStorage();showToast(`「${name}」を削除しました`);
+}
+function moveRoute(i,dir){
+  const j=i+dir;
+  if(j<0||j>=routeMaster.length) return;
+  [routeMaster[i],routeMaster[j]]=[routeMaster[j],routeMaster[i]];
+  renderMaster();saveToStorage();
 }
 function addShoku(){
   const val=document.getElementById('shoku-new').value.trim();
