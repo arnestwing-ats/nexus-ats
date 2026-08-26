@@ -1410,6 +1410,10 @@ function decisionMissing(c){
 }
 function renderDecision(){
   const decided=interviewees.filter(c=>c.phases&&c.phases['内定']);
+  // ★ 応募経路が未設定の候補者はIndeed経由として自動補完（既存データも含めて反映・保存）
+  let backfilled=false;
+  decided.forEach(c=>{ if(!c.route){ c.route='Indeed'; backfilled=true; } });
+  if(backfilled) saveToStorage();
   // 入社日が遅い順（未入力は末尾）に並び替え
   decided.sort((a,b)=>{
     if(!a.joinDate && !b.joinDate) return 0;
@@ -1428,7 +1432,7 @@ function renderDecision(){
     return '<tr'+(hired?' style="background:#fef9c3"':'')+'>'
       +'<td style="font-weight:500">'+c.name+(c.manualDecision?' <span class="bdg" style="font-size:9px;background:#f5f3ff;color:#6d28d9;border-color:#c4b5fd">手動追加</span>':'')+'</td>'
       +'<td>'+(c.shoku&&c.shoku!=='（未設定）'?c.shoku:'−')+'</td>'
-      +'<td>'+(c.route||'−')+'</td>'
+      +'<td>'+(c.route||'Indeed')+'</td>'
       +'<td>'+(d.dept||'−')+'</td>'
       +'<td>'+(d.kihon!==undefined&&d.kihon!==''?'¥'+Number(d.kihon).toLocaleString():'−')+'</td>'
       +'<td>'+(d.kotei!==undefined&&d.kotei!==''?'¥'+Number(d.kotei).toLocaleString():'−')+'</td>'
@@ -1468,7 +1472,7 @@ function openDecisionModal(id){
   currentDecisionId=id;
   const d=c.decision||{};
   document.getElementById('dec-name').textContent=c.name+' さんの決定情報';
-  document.getElementById('dec-route').innerHTML=routeOpts(c.route||'その他');
+  document.getElementById('dec-route').innerHTML=routeOpts(c.route||'Indeed');
   document.getElementById('dec-dept').innerHTML=tantoOpts(d.dept||'（未設定）');
   document.getElementById('dec-kihon').value=(d.kihon!==undefined&&d.kihon!=='')?d.kihon:'';
   document.getElementById('dec-kotei').value=(d.kotei!==undefined&&d.kotei!=='')?d.kotei:'';
