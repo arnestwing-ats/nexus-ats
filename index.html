@@ -679,7 +679,8 @@ async function saveToStorage(keys){
 }
 
 function buildSaveData(){
-  return {applicants,interviewees,agencies,shokuMaster,shokuTypeMap,agentMaster,tantoMaster,routeMaster,monthlyBudgets,users,idC,agIdC,uIdC};
+  return {applicants,interviewees,agencies,shokuMaster,shokuTypeMap,agentMaster,tantoMaster,routeMaster,monthlyBudgets,users,idC,agIdC,uIdC,
+    orgMaster,orgMembers,orgOpenPositions,orgDeptIdC,orgMemberIdC,orgPosIdC};
 }
 
 // スプレッドシートから読み込み
@@ -697,6 +698,12 @@ async function loadFromStorage(){
       if(Array.isArray(data.agentMaster)) agentMaster=data.agentMaster;
       if(Array.isArray(data.tantoMaster)) tantoMaster=data.tantoMaster;
       if(Array.isArray(data.routeMaster)&&data.routeMaster.length>0) routeMaster=data.routeMaster;
+      if(Array.isArray(data.orgMaster)&&data.orgMaster.length>0) orgMaster=data.orgMaster;
+      if(Array.isArray(data.orgMembers)) orgMembers=data.orgMembers;
+      if(Array.isArray(data.orgOpenPositions)) orgOpenPositions=data.orgOpenPositions;
+      if(typeof data.orgDeptIdC==='number') orgDeptIdC=data.orgDeptIdC;
+      if(typeof data.orgMemberIdC==='number') orgMemberIdC=data.orgMemberIdC;
+      if(typeof data.orgPosIdC==='number') orgPosIdC=data.orgPosIdC;
       if(data.monthlyBudgets && typeof data.monthlyBudgets==='object') monthlyBudgets=data.monthlyBudgets;
       if(Array.isArray(data.users)&&data.users.length>0) users=data.users;
       if(data.idC) idC=data.idC;
@@ -722,6 +729,12 @@ async function loadFromStorage(){
     if(data.agentMaster) agentMaster=data.agentMaster;
     if(data.tantoMaster) tantoMaster=data.tantoMaster;
     if(data.routeMaster&&data.routeMaster.length>0) routeMaster=data.routeMaster;
+    if(data.orgMaster&&data.orgMaster.length>0) orgMaster=data.orgMaster;
+    if(data.orgMembers) orgMembers=data.orgMembers;
+    if(data.orgOpenPositions) orgOpenPositions=data.orgOpenPositions;
+    if(typeof data.orgDeptIdC==='number') orgDeptIdC=data.orgDeptIdC;
+    if(typeof data.orgMemberIdC==='number') orgMemberIdC=data.orgMemberIdC;
+    if(typeof data.orgPosIdC==='number') orgPosIdC=data.orgPosIdC;
     if(data.monthlyBudgets) monthlyBudgets=data.monthlyBudgets;
     if(data.users) users=data.users;
     if(data.uIdC) uIdC=data.uIdC;
@@ -790,8 +803,32 @@ let shokuTypeMap={'住設事務':'jimu','受発注事務':'jimu','DX事務':'jim
 let tantoMaster=[];
 // 応募経路マスター（Indeedは自動反映のデフォルト、他はマスター画面で追加・変更可能）
 let routeMaster=['Indeed','リファラル','HP応募','その他'];
-// マスター画面のタブ状態（職種／担当者）
+// マスター画面のタブ状態（職種／担当者／応募経路／組織）
 let masterTab='shoku';
+// ★ 組織マスター：部署ツリー（バックオフィスのみ登録済み。現場は後日追加予定）
+let orgDeptIdC=100,orgMemberIdC=1,orgPosIdC=1;
+let orgMaster=[
+  {id:orgDeptIdC++,name:'取締役会',children:[]},
+  {id:orgDeptIdC++,name:'コンプライアンス委員会',children:[]},
+  {id:orgDeptIdC++,name:'安全衛生委員会',children:[]},
+  {id:orgDeptIdC++,name:'管理部',children:[
+    {id:orgDeptIdC++,name:'総務課',children:[]},
+    {id:orgDeptIdC++,name:'経理課',children:[]},
+  ]},
+  {id:orgDeptIdC++,name:'コンプライアンス推進室',children:[]},
+  {id:orgDeptIdC++,name:'事業推進部',children:[
+    {id:orgDeptIdC++,name:'事業統括管理課',children:[]},
+    {id:orgDeptIdC++,name:'外国人材戦略推進課',children:[]},
+  ]},
+];
+// ★ 組織マスター：社員名簿
+let orgMembers=[];
+// ★ 組織マスター：採用したいポジション一覧
+let orgOpenPositions=[];
+// 組織タブ内のサブビュー（名簿／採用ポジション）
+let orgSubTab='roster';
+// 組織図で開いている部署ID（展開状態の保持用）
+let orgExpanded={};
 // エージェント会社マスター（社名・料率・返金規定）
 let agentMaster=[
   {name:'Nexus Recruitment',rate:35,refund:'入社後3ヶ月以内退職で全額返金'},
@@ -2745,14 +2782,16 @@ function renderMaster(){
   const isShoku=masterTab==='shoku';
   const isTanto=masterTab==='tanto';
   const isRoute=masterTab==='route';
+  const isOrg=masterTab==='org';
   document.getElementById('main').innerHTML=`<div class="pg">
     <div class="ph">
-      <div><h2>マスター</h2><p>職種区分・現場採用担当者・応募経路の登録管理</p></div>
+      <div><h2>マスター</h2><p>職種区分・現場採用担当者・応募経路・組織の登録管理</p></div>
     </div>
     <div class="atab-wrap">
       <button class="atab ${isShoku?'on':''}" onclick="masterTab='shoku';renderMaster()">職種マスター</button>
       <button class="atab ${isTanto?'on':''}" onclick="masterTab='tanto';renderMaster()">担当者マスター</button>
       <button class="atab ${isRoute?'on':''}" onclick="masterTab='route';renderMaster()">応募経路マスター</button>
+      <button class="atab ${isOrg?'on':''}" onclick="masterTab='org';renderMaster()">組織</button>
     </div>
     ${isShoku?`
     <div class="sc">
@@ -2798,7 +2837,7 @@ function renderMaster(){
         <button class="btn btn-blue" onclick="addTanto()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
       </div>
     </div>
-    `:`
+    `:isRoute?`
     <div class="sc">
       <div class="sc-t">現在の応募経路一覧（↑↓で表示順を変更できます）</div>
       <p style="font-size:11px;color:var(--tx1);margin-bottom:8px">「Indeed」はCSVインポート時に応募経路が未指定の場合、自動的に設定されます。</p>
@@ -2819,9 +2858,239 @@ function renderMaster(){
         <button class="btn btn-blue" onclick="addRoute()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
       </div>
     </div>
-    `}
+    `:orgOrgHTML()}
   </div>`;
 }
+
+// ★ 組織タブ本体のHTML生成（名簿／採用ポジションの2サブビュー）
+function orgOrgHTML(){
+  const isRoster=orgSubTab==='roster';
+  return `
+    <div class="atab-wrap" style="margin-bottom:10px">
+      <button class="atab ${isRoster?'on':''}" onclick="orgSubTab='roster';renderMaster()">組織図・名簿</button>
+      <button class="atab ${!isRoster?'on':''}" onclick="orgSubTab='positions';renderMaster()">採用したいポジション</button>
+    </div>
+    ${isRoster?orgRosterHTML():orgPositionsHTML()}
+  `;
+}
+
+// 部署ツリーをHTML化（再帰）
+function orgDeptTreeHTML(nodes,depth){
+  depth=depth||0;
+  return nodes.map(n=>{
+    const hasChildren=n.children&&n.children.length>0;
+    const expanded=!!orgExpanded[n.id];
+    const memberCount=orgMembers.filter(m=>m.deptId===n.id).length;
+    return `<div style="margin-left:${depth*20}px">
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:0.5px solid var(--bd2)">
+        ${hasChildren?`<button style="background:none;border:none;cursor:pointer;color:var(--tx1);width:16px;font-size:10px" onclick="orgToggleExpand(${n.id})">${expanded?'▼':'▶'}</button>`:'<span style="width:16px;display:inline-block"></span>'}
+        <i class="ti ti-users" aria-hidden="true" style="color:#7c3aed;font-size:14px"></i>
+        <span style="font-size:12px;font-weight:${depth===0?'600':'400'}">${n.name}</span>
+        <span style="font-size:10px;color:var(--tx1)">${memberCount>0?`（${memberCount}名）`:''}</span>
+        <div style="margin-left:auto;display:flex;gap:4px">
+          <button class="btn btn-outline" style="font-size:9px;padding:2px 7px" onclick="orgAddDept(${n.id})">＋下位部署</button>
+          <button class="btn-sm-red" onclick="orgDeleteDept(${n.id})"><i class="ti ti-trash" aria-hidden="true"></i></button>
+        </div>
+      </div>
+      ${hasChildren&&expanded?orgDeptTreeHTML(n.children,depth+1):''}
+    </div>`;
+  }).join('');
+}
+
+function orgRosterHTML(){
+  const flatDepts=flattenOrgTree(orgMaster);
+  const deptOpts=flatDepts.map(d=>`<option value="${d.id}">${d.label}</option>`).join('');
+  const rows=orgMembers.map(m=>{
+    return `<tr>
+      <td>${m.empNo||'−'}</td>
+      <td>${orgDeptLabel(m.deptId)}</td>
+      <td>${m.position||'−'}</td>
+      <td style="font-weight:500">${m.name}</td>
+      <td>${m.age||'−'}</td>
+      <td>${m.joinDate||'−'}</td>
+      <td>${tenureLabel(m.joinDate)}</td>
+      <td style="text-align:right"><button class="btn-sm-red" onclick="orgDeleteMember(${m.id})"><i class="ti ti-trash" aria-hidden="true"></i> 削除</button></td>
+    </tr>`;
+  }).join('');
+  return `
+    <div style="display:grid;grid-template-columns:320px 1fr;gap:14px">
+      <div class="sc" style="margin:0">
+        <div class="sc-t">組織図（バックオフィス）</div>
+        <p style="font-size:10px;color:var(--tx1);margin-bottom:6px">※現場職の部署は後日追加予定です</p>
+        <div id="org-tree">${orgDeptTreeHTML(orgMaster,0)}</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <input id="org-dept-new" type="text" placeholder="新しい部署名（最上位）" style="flex:1;border:0.5px solid var(--bd1);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;background:#fff" onkeydown="if(event.key==='Enter')orgAddDept(null)">
+          <button class="btn btn-blue" onclick="orgAddDept(null)"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
+        </div>
+      </div>
+      <div class="sc" style="margin:0">
+        <div class="sc-t">社員名簿</div>
+        <div style="display:grid;grid-template-columns:1fr 1.6fr 1fr 1fr 0.6fr 1fr auto;gap:6px;margin-bottom:10px;align-items:end">
+          <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">社員番号</label><input id="org-m-empno" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+          <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">部署 *</label><select id="org-m-dept" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"><option value="">選択してください</option>${deptOpts}</select></div>
+          <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">役職</label><input id="org-m-position" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+          <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">名前 *</label><input id="org-m-name" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+          <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">年齢</label><input id="org-m-age" type="number" min="0" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+          <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">入社年月日</label><input id="org-m-joindate" type="date" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+          <button class="btn btn-blue" style="height:28px" onclick="orgAddMember()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
+        </div>
+        <div class="tw" style="margin:0"><table><thead><tr>
+          <th>社員番号</th><th>部署</th><th>役職</th><th>名前</th><th>年齢</th><th>入社年月日</th><th>在籍年数</th><th style="text-align:right">操作</th>
+        </tr></thead><tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--tx1);padding:20px">社員が登録されていません</td></tr>'}</tbody></table></div>
+      </div>
+    </div>
+  `;
+}
+
+function orgPositionsHTML(){
+  const flatDepts=flattenOrgTree(orgMaster);
+  const deptOpts=flatDepts.map(d=>`<option value="${d.id}">${d.label}</option>`).join('');
+  const rows=orgOpenPositions.map(p=>`<tr>
+      <td>${orgDeptLabel(p.deptId)}</td>
+      <td style="font-weight:500">${p.position}</td>
+      <td>${p.count||1}名</td>
+      <td>${p.memo||'−'}</td>
+      <td style="text-align:right"><button class="btn-sm-red" onclick="orgDeletePosition(${p.id})"><i class="ti ti-trash" aria-hidden="true"></i> 削除</button></td>
+    </tr>`).join('');
+  return `
+    <div class="sc">
+      <div class="sc-t">採用したいポジション一覧</div>
+      <p style="font-size:11px;color:var(--tx1);margin-bottom:10px">まだ社員は決まっていないが、採用を検討しているポジションの枠を登録できます。</p>
+      <div style="display:grid;grid-template-columns:1.4fr 1.4fr 0.6fr 1.6fr auto;gap:6px;margin-bottom:12px;align-items:end">
+        <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">部署 *</label><select id="org-p-dept" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"><option value="">選択してください</option>${deptOpts}</select></div>
+        <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">募集ポジション *</label><input id="org-p-position" placeholder="例：経理担当" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+        <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">人数</label><input id="org-p-count" type="number" min="1" value="1" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+        <div><label style="font-size:10px;color:var(--tx1);display:block;margin-bottom:2px">メモ</label><input id="org-p-memo" placeholder="任意" style="width:100%;border:0.5px solid var(--bd1);border-radius:5px;padding:5px 7px;font-size:11px;outline:none"></div>
+        <button class="btn btn-blue" style="height:28px" onclick="orgAddPosition()"><i class="ti ti-plus" aria-hidden="true"></i>追加</button>
+      </div>
+      <div class="tw" style="margin:0"><table><thead><tr>
+        <th>部署</th><th>募集ポジション</th><th>人数</th><th>メモ</th><th style="text-align:right">操作</th>
+      </tr></thead><tbody>${rows||'<tr><td colspan="5" style="text-align:center;color:var(--tx1);padding:20px">登録されている採用希望ポジションはありません</td></tr>'}</tbody></table></div>
+    </div>
+  `;
+}
+
+// ---- 組織：ヘルパー関数 ----
+function flattenOrgTree(nodes,prefix){
+  let out=[];
+  (nodes||[]).forEach(n=>{
+    const label=prefix?`${prefix} ＞ ${n.name}`:n.name;
+    out.push({id:n.id,label});
+    if(n.children&&n.children.length) out=out.concat(flattenOrgTree(n.children,label));
+  });
+  return out;
+}
+function findOrgNode(nodes,id){
+  for(const n of nodes){
+    if(n.id===id) return n;
+    if(n.children&&n.children.length){ const f=findOrgNode(n.children,id); if(f) return f; }
+  }
+  return null;
+}
+function findOrgContainer(nodes,id){
+  for(let i=0;i<nodes.length;i++){
+    if(nodes[i].id===id) return {arr:nodes,idx:i};
+    if(nodes[i].children&&nodes[i].children.length){
+      const f=findOrgContainer(nodes[i].children,id);
+      if(f) return f;
+    }
+  }
+  return null;
+}
+function orgDeptLabel(id){
+  const flat=flattenOrgTree(orgMaster);
+  const f=flat.find(x=>x.id===id);
+  return f?f.label:'（未設定）';
+}
+function tenureLabel(joinDate){
+  if(!joinDate) return '−';
+  const d=new Date(joinDate);
+  if(isNaN(d.getTime())) return '−';
+  const now=new Date();
+  let years=now.getFullYear()-d.getFullYear();
+  let months=now.getMonth()-d.getMonth();
+  if(now.getDate()<d.getDate()) months--;
+  if(months<0){years--;months+=12;}
+  if(years<0) return '−';
+  return years>0?`${years}年${months}ヶ月`:`${months}ヶ月`;
+}
+
+// ---- 組織：部署ツリー操作 ----
+function orgToggleExpand(id){
+  orgExpanded[id]=!orgExpanded[id];
+  renderMaster();
+}
+function orgAddDept(parentId){
+  let name,parentArr;
+  if(parentId===null){
+    name=(document.getElementById('org-dept-new').value||'').trim();
+    parentArr=orgMaster;
+  } else {
+    name=prompt('新しい下位部署の名前を入力してください');
+    if(name===null) return;
+    name=name.trim();
+    const node=findOrgNode(orgMaster,parentId);
+    if(!node) return;
+    if(!node.children) node.children=[];
+    parentArr=node.children;
+    orgExpanded[parentId]=true;
+  }
+  if(!name){showToast('部署名を入力してください');return;}
+  parentArr.push({id:orgDeptIdC++,name,children:[]});
+  renderMaster();saveToStorage();showToast(`「${name}」を追加しました`);
+}
+function orgDeleteDept(id){
+  const node=findOrgNode(orgMaster,id);
+  if(!node) return;
+  const memberCount=orgMembers.filter(m=>m.deptId===id).length;
+  const childCount=(node.children||[]).length;
+  if(!confirm(`「${node.name}」を削除しますか？${memberCount>0?`\n※${memberCount}名の社員の部署が「未設定」になります。`:''}${childCount>0?`\n※下位部署（${childCount}件）も一緒に削除されます。`:''}`)) return;
+  const container=findOrgContainer(orgMaster,id);
+  if(!container) return;
+  container.arr.splice(container.idx,1);
+  orgMembers.forEach(m=>{ if(m.deptId===id) m.deptId=null; });
+  renderMaster();saveToStorage();showToast('削除しました');
+}
+
+// ---- 組織：社員名簿操作 ----
+function orgAddMember(){
+  const empNo=document.getElementById('org-m-empno').value.trim();
+  const deptId=document.getElementById('org-m-dept').value;
+  const position=document.getElementById('org-m-position').value.trim();
+  const name=document.getElementById('org-m-name').value.trim();
+  const age=document.getElementById('org-m-age').value;
+  const joinDate=document.getElementById('org-m-joindate').value;
+  if(!name){showToast('名前を入力してください');document.getElementById('org-m-name').style.borderColor='#dc2626';return;}
+  if(!deptId){showToast('部署を選択してください');document.getElementById('org-m-dept').style.borderColor='#dc2626';return;}
+  orgMembers.push({
+    id:orgMemberIdC++,empNo,deptId:parseInt(deptId),position,name,
+    age:age?Number(age):null,joinDate
+  });
+  renderMaster();saveToStorage();showToast(`「${name}」を追加しました`);
+}
+function orgDeleteMember(id){
+  const m=orgMembers.find(x=>x.id===id);if(!m)return;
+  if(!confirm(`「${m.name}」を名簿から削除しますか？`)) return;
+  orgMembers=orgMembers.filter(x=>x.id!==id);
+  renderMaster();saveToStorage();showToast('削除しました');
+}
+
+// ---- 組織：採用希望ポジション操作 ----
+function orgAddPosition(){
+  const deptId=document.getElementById('org-p-dept').value;
+  const position=document.getElementById('org-p-position').value.trim();
+  const count=document.getElementById('org-p-count').value;
+  const memo=document.getElementById('org-p-memo').value.trim();
+  if(!deptId){showToast('部署を選択してください');document.getElementById('org-p-dept').style.borderColor='#dc2626';return;}
+  if(!position){showToast('募集ポジションを入力してください');document.getElementById('org-p-position').style.borderColor='#dc2626';return;}
+  orgOpenPositions.push({id:orgPosIdC++,deptId:parseInt(deptId),position,count:count?Number(count):1,memo});
+  renderMaster();saveToStorage();showToast(`「${position}」を追加しました`);
+}
+function orgDeletePosition(id){
+  orgOpenPositions=orgOpenPositions.filter(x=>x.id!==id);
+  renderMaster();saveToStorage();showToast('削除しました');
+}
+
 function addRoute(){
   const val=document.getElementById('route-new').value.trim();
   if(!val){showToast('応募経路名を入力してください');return;}
