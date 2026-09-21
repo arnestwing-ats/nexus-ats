@@ -1469,6 +1469,7 @@ function renderDecision(){
     return '<tr'+(hired?' style="background:#fef9c3"':'')+'>'
       +'<td style="font-weight:500">'+c.name+(c.manualDecision?' <span class="bdg" style="font-size:9px;background:#f5f3ff;color:#6d28d9;border-color:#c4b5fd">手動追加</span>':'')+'</td>'
       +'<td>'+(c.shoku&&c.shoku!=='（未設定）'?c.shoku:'−')+'</td>'
+      +'<td>'+(c.appliedAt||'−')+'</td>'
       +'<td>'+(c.route||'Indeed')+'</td>'
       +'<td>'+(d.dept||'−')+'</td>'
       +'<td>'+(d.kihon!==undefined&&d.kihon!==''?'¥'+Number(d.kihon).toLocaleString():'−')+'</td>'
@@ -1497,7 +1498,7 @@ function renderDecision(){
     +'</div>'
     +(decided.length
       ?'<div class="tw"><table><thead><tr>'
-        +'<th>氏名</th><th>職種区分</th><th>応募経路</th><th>配属先責任者</th><th>基本給</th><th>固定残業代</th><th>調整給</th><th>入社日</th><th>入社手続き場所</th><th>ステータス</th><th style="text-align:right">操作</th>'
+        +'<th>氏名</th><th>職種区分</th><th>応募日</th><th>応募経路</th><th>配属先責任者</th><th>基本給</th><th>固定残業代</th><th>調整給</th><th>入社日</th><th>入社手続き場所</th><th>ステータス</th><th style="text-align:right">操作</th>'
         +'</tr></thead><tbody>'+rows+'</tbody></table></div>'
       :'<p style="font-size:12px;color:var(--tx1)">内定者がいません。面接管理で「内定」を記録すると、ここに自動で表示されます。</p>')
     +'</div>';
